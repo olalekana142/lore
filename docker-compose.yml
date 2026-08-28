@@ -1,0 +1,44 @@
+# Lore — full stack in two containers.
+#
+#   docker compose up --build
+#
+# The API reads GROQ_API_KEY (and model overrides) from the repo .env via ${...}
+# substitution below. The knowledge graph persists in the named volume `lore-data`.
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      GROQ_API_KEY: ${GROQ_API_KEY:?set GROQ_API_KEY in .env}
+      EXTRACTION_MODEL: ${EXTRACTION_MODEL:-openai/gpt-oss-20b}
+      GENERATION_MODEL: ${GENERATION_MODEL:-openai/gpt-oss-120b}
+      DB_PATH: /app/data/lore.kuzu
+      # Seed the sample "acme" company on first boot (set to 0 to start empty).
+      LORE_SEED_SAMPLE: ${LORE_SEED_SAMPLE:-1}
+      # Optional: paste a service-account key JSON here (in .env) to enable Google Drive ingest.
+      GOOGLE_SERVICE_ACCOUNT_JSON: ${GOOGLE_SERVICE_ACCOUNT_JSON:-}
+    volumes:
+      - lore-data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        # Baked into the browser bundle at build time -> must be reachable from the
+        # user's browser. localhost:8000 works because the API port is published above.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  lore-data:

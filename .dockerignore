@@ -1,0 +1,12 @@
+# Keep secrets, local state, and heavy dirs out of the backend build context.
+.env
+.env.*
+.venv/
+data/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+frontend/
+.git/
+*.md
+!README.md

@@ -1,0 +1,50 @@
+[project]
+name = "lore"
+version = "0.1.0"
+description = "Lore — a company knowledge base (GraphRAG): ask any question, get a cited answer"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastmcp>=0.2.0",       # MCP server (FastMCP)
+    "kuzu>=0.4.0",          # embedded graph database
+    "groq>=0.11.0",         # Groq API — fact extraction + answer synthesis (Llama etc.)
+    "fastapi>=0.110.0",     # HTTP API for the web frontend
+    "uvicorn>=0.29.0",      # ASGI server for the API
+    "python-multipart>=0.0.9",  # file uploads (document import)
+    "pydantic>=2.0.0",      # typed models for Document/Fact/etc.
+    "pydantic-settings>=2.0.0",
+    "numpy>=1.26.0",        # embedding math / cosine similarity
+    "fastembed>=0.3.0",     # local embeddings (BAAI/bge-small-en-v1.5), no API key
+    "httpx>=0.27.0",        # connector API calls
+]
+
+[project.optional-dependencies]
+orchestration = [
+    "prefect>=3.0.0",       # flow scheduling/observability; pipeline degrades gracefully without it
+]
+files = [
+    "pypdf>=4.0.0",         # .pdf document parsing
+    "python-docx>=1.1.0",   # .docx document parsing
+]
+drive = [
+    "google-api-python-client>=2.100.0",  # Google Drive API v3
+    "google-auth>=2.30.0",                # service-account credentials
+]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.6.0",
+]
+
+[project.scripts]
+lore-mcp = "lore.mcp_server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["lore"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

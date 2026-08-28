@@ -1,0 +1,20 @@
+# Secrets
+.env
+
+# Data / graph store
+data/
+*.kuzu
+*.kuzu.wal
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Tooling
+.pytest_cache/
+.ruff_cache/

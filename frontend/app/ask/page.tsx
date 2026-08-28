@@ -1,0 +1,220 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { askStream, sendFeedback, type Confidence, type Source, type Turn } from "@/lib/api";
+import { useCompany } from "@/lib/useCompany";
+import AnswerText from "../components/AnswerText";
+import { ConfidenceBadge, SourceCard } from "../components/ui";
+import { IconSend, IconThumbUp, IconThumbDown, IconChat } from "../components/icons";
+
+interface Msg {
+  role: "user" | "assistant";
+  content: string;
+  sources?: Source[];
+  confidence?: Confidence;
+  streaming?: boolean;
+}
+
+const SUGGESTIONS = [
+  "How many PTO days do I get?",
+  "I lost my laptop — what now?",
+  "What's the meal limit when traveling?",
+  "How much parental leave do I get?",
+];
+
+export default function AskPage() {
+  const [companyId] = useCompany();
+  const [messages, setMessages] = useState<Msg[]>([]);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const endRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  async function run(question: string) {
+    if (!question.trim() || busy) return;
+    setInput("");
+    setBusy(true);
+
+    const history: Turn[] = messages
+      .filter((m) => !m.streaming)
+      .map((m) => ({ role: m.role, content: m.content }));
+
+    setMessages((prev) => [
+      ...prev,
+      { role: "user", content: question },
+      { role: "assistant", content: "", streaming: true },
+    ]);
+
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    const setLast = (patch: Partial<Msg>) =>
+      setMessages((prev) => {
+        const next = [...prev];
+        next[next.length - 1] = { ...next[next.length - 1], ...patch };
+        return next;
+      });
+
+    await askStream(
+      companyId,
+      question,
+      history,
+      {
+        onSources: (sources, confidence) => setLast({ sources, confidence }),
+        onToken: (t) => setMessages((prev) => {
+          const next = [...prev];
+          const last = next[next.length - 1];
+          next[next.length - 1] = { ...last, content: last.content + t };
+          return next;
+        }),
+        onDone: (cited) => setLast({ sources: cited, streaming: false }),
+        onError: (msg) =>
+          setLast({ content: `⚠️ ${msg} — is the API running on :8000?`, streaming: false }),
+      },
+      ctrl.signal,
+    );
+    setBusy(false);
+    abortRef.current = null;
+  }
+
+  function stop() {
+    abortRef.current?.abort();
+    setMessages((prev) => {
+      const next = [...prev];
+      const last = next[next.length - 1];
+      if (last?.streaming) next[next.length - 1] = { ...last, streaming: false };
+      return next;
+    });
+    setBusy(false);
+  }
+
+  const empty = messages.length === 0;
+
+  return (
+    <div className="mx-auto flex h-[calc(100vh-5rem)] max-w-3xl flex-col">
+      {empty ? (
+        <div className="animate-fade-up flex flex-1 flex-col items-center justify-center text-center">
+          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-accent-weak text-accent">
+            <IconChat size={26} />
+          </span>
+          <h1 className="mt-5 text-2xl font-bold tracking-tight">Ask Lore anything</h1>
+          <p className="mt-2 max-w-md text-sm text-muted">
+            Ask about policies, benefits, IT, travel — anything in your company&apos;s docs.
+            Every answer cites the source it came from.
+          </p>
+          <div className="mt-6 flex flex-wrap justify-center gap-2">
+            {SUGGESTIONS.map((s) => (
+              <button key={s} onClick={() => run(s)} className="btn-ghost px-3 py-2 text-xs">
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="flex-1 space-y-6 overflow-y-auto pb-4 pr-1">
+          {messages.map((m, i) =>
+            m.role === "user" ? (
+              <div key={i} className="flex justify-end">
+                <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent px-4 py-2.5 text-sm font-medium text-accent-fg">
+                  {m.content}
+                </div>
+              </div>
+            ) : (
+              <AssistantBubble key={i} msg={m} companyId={companyId} />
+            ),
+          )}
+          <div ref={endRef} />
+        </div>
+      )}
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          run(input);
+        }}
+        className="mt-2 flex items-center gap-2 border-t border-border pt-4"
+      >
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder={empty ? "Ask a question…" : "Ask a follow-up…"}
+          className="input flex-1 px-4 py-3 text-sm"
+          autoFocus
+        />
+        {busy ? (
+          <button type="button" onClick={stop} className="btn-ghost px-4 py-3 text-sm">
+            Stop
+          </button>
+        ) : (
+          <button type="submit" disabled={!input.trim()} className="btn-primary grid h-11 w-11 place-items-center">
+            <IconSend size={18} />
+          </button>
+        )}
+      </form>
+    </div>
+  );
+}
+
+function AssistantBubble({ msg, companyId }: { msg: Msg; companyId: string }) {
+  const [cite, setCite] = useState<number | null>(null);
+  const [rated, setRated] = useState<"up" | "down" | null>(null);
+
+  const rate = (r: "up" | "down") => {
+    setRated(r);
+    sendFeedback(companyId, "", msg.content, r).catch(() => {});
+  };
+
+  return (
+    <div className="animate-fade-up">
+      <div className="card p-5">
+        {msg.confidence && (
+          <div className="mb-2.5">
+            <ConfidenceBadge confidence={msg.confidence} />
+          </div>
+        )}
+        {msg.content ? (
+          <AnswerText text={msg.content} streaming={msg.streaming} onCite={(n) => setCite(n)} />
+        ) : (
+          <div className="flex items-center gap-1 py-1">
+            <span className="dot" />
+            <span className="dot" />
+            <span className="dot" />
+          </div>
+        )}
+
+        {!msg.streaming && msg.content && (
+          <div className="mt-4 flex items-center gap-1 border-t border-border-soft pt-3">
+            <span className="mr-1 text-xs text-muted-dim">Helpful?</span>
+            <button
+              onClick={() => rate("up")}
+              className={`rounded-md p-1.5 transition-colors hover:bg-surface-2 ${rated === "up" ? "text-green" : "text-muted-dim"}`}
+              title="Helpful"
+            >
+              <IconThumbUp size={15} />
+            </button>
+            <button
+              onClick={() => rate("down")}
+              className={`rounded-md p-1.5 transition-colors hover:bg-surface-2 ${rated === "down" ? "text-red" : "text-muted-dim"}`}
+              title="Not helpful"
+            >
+              <IconThumbDown size={15} />
+            </button>
+            {rated && <span className="ml-1 text-xs text-muted-dim">Thanks for the feedback</span>}
+          </div>
+        )}
+      </div>
+
+      {msg.sources && msg.sources.length > 0 && (
+        <div className="mt-2.5 space-y-2">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-dim">Sources</div>
+          {msg.sources.map((s) => (
+            <SourceCard key={s.doc_id} source={s} highlight={cite === s.n} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

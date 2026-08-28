@@ -1,0 +1,238 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   Lore design system — warm, clean, legible workspace. Light-first, dark-aware.
+   Colors are CSS variables so the whole app re-themes from these two blocks.
+   ========================================================================== */
+:root {
+  --bg: #f7f4ee;          /* warm cream page */
+  --surface: #ffffff;     /* cards */
+  --surface-2: #f1ece3;   /* subtle fills, hover */
+  --surface-3: #e9e2d6;
+  --border: #e5ddce;      /* warm hairline */
+  --border-soft: #efe9dd;
+  --foreground: #2a2520;  /* warm ink */
+  --muted: #6b6152;       /* secondary text */
+  --muted-dim: #9c917f;   /* tertiary text */
+  --accent: #c25e28;      /* burnt-orange, confident + warm */
+  --accent-hover: #a94f1e;
+  --accent-weak: #f6e7db; /* accent tint bg */
+  --accent-fg: #ffffff;
+  --green: #3f7d55;
+  --green-weak: #e4efe4;
+  --amber: #b5811f;
+  --amber-weak: #f6ecd4;
+  --red: #bb3f34;
+  --red-weak: #f7e3df;
+  --shadow: 20px 40px -24px rgba(60, 44, 24, 0.28);
+  --shadow-sm: 0 1px 2px rgba(60, 44, 24, 0.06), 0 1px 3px rgba(60, 44, 24, 0.05);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --bg: #1a1613;
+    --surface: #232019;
+    --surface-2: #2b271f;
+    --surface-3: #34302650;
+    --border: #38322a;
+    --border-soft: #2e2a22;
+    --foreground: #f1ebe0;
+    --muted: #b0a591;
+    --muted-dim: #7d7565;
+    --accent: #e58a4f;
+    --accent-hover: #f0996078;
+    --accent-weak: #3a2a1d;
+    --accent-fg: #1a1613;
+    --green: #6bbb85;
+    --green-weak: #23342a;
+    --amber: #e0b458;
+    --amber-weak: #37301d;
+    --red: #e58379;
+    --red-weak: #3a2320;
+    --shadow: 24px 48px -28px rgba(0, 0, 0, 0.7);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  }
+}
+
+:root.dark {
+  --bg: #1a1613;
+  --surface: #232019;
+  --surface-2: #2b271f;
+  --surface-3: #34302650;
+  --border: #38322a;
+  --border-soft: #2e2a22;
+  --foreground: #f1ebe0;
+  --muted: #b0a591;
+  --muted-dim: #7d7565;
+  --accent: #e58a4f;
+  --accent-hover: #f09960;
+  --accent-weak: #3a2a1d;
+  --accent-fg: #1a1613;
+  --green: #6bbb85;
+  --green-weak: #23342a;
+  --amber: #e0b458;
+  --amber-weak: #37301d;
+  --red: #e58379;
+  --red-weak: #3a2320;
+  --shadow: 24px 48px -28px rgba(0, 0, 0, 0.7);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-border: var(--border);
+  --color-border-soft: var(--border-soft);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-dim: var(--muted-dim);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-weak: var(--accent-weak);
+  --color-accent-fg: var(--accent-fg);
+  --color-green: var(--green);
+  --color-green-weak: var(--green-weak);
+  --color-amber: var(--amber);
+  --color-amber-weak: var(--amber-weak);
+  --color-red: var(--red);
+  --color-red-weak: var(--red-weak);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --radius: 0.9rem;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ---------- scrollbar ---------- */
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 6px; border: 3px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted-dim); background-clip: padding-box; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- reusable primitives ---------- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-radius: 0.7rem;
+  font-weight: 600;
+  transition: background 0.15s ease, transform 0.12s ease, opacity 0.15s ease;
+}
+.btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+.btn-primary:active:not(:disabled) { transform: translateY(1px); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-ghost {
+  background: var(--surface);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  font-weight: 600;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.btn-ghost:hover { border-color: var(--accent); background: var(--surface-2); }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 0.15rem 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.card-hover { transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease; }
+.card-hover:hover { transform: translateY(-2px); border-color: var(--accent); box-shadow: var(--shadow); }
+
+.input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  color: var(--foreground);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
+
+/* citation chip inside answers */
+.cite {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding: 0 0.3rem;
+  margin: 0 0.1rem;
+  border-radius: 0.4rem;
+  background: var(--accent-weak);
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 700;
+  vertical-align: 0.08em;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.cite:hover { background: var(--accent); color: var(--accent-fg); }
+
+/* answer prose */
+.prose-answer { line-height: 1.65; }
+.prose-answer p { margin: 0 0 0.7rem; }
+.prose-answer p:last-child { margin-bottom: 0; }
+.prose-answer ul { margin: 0.2rem 0 0.7rem; padding-left: 1.1rem; list-style: disc; }
+.prose-answer li { margin: 0.2rem 0; }
+.prose-answer strong { font-weight: 650; color: var(--foreground); }
+
+/* ---------- animations ---------- */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.animate-fade-up { animation: fadeUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.animate-fade-in { animation: fadeIn 0.3s ease both; }
+
+@keyframes scaleIn { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
+.animate-scale-in { animation: scaleIn 0.2s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+.shimmer {
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 50%, var(--surface-2) 100%);
+  background-size: 800px 100%;
+  animation: shimmer 1.3s linear infinite;
+  border-radius: var(--radius);
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  width: 16px; height: 16px;
+  border: 2px solid color-mix(in srgb, var(--accent-fg) 40%, transparent);
+  border-top-color: var(--accent-fg);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes blink { 50% { opacity: 0; } }
+.caret::after { content: "▍"; margin-left: 1px; color: var(--accent); animation: blink 1s step-end infinite; }
+
+@keyframes bounce2 { 0%,80%,100% { transform: scale(0.5); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }
+.dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: bounce2 1.2s infinite both; }
+.dot:nth-child(2) { animation-delay: 0.15s; }
+.dot:nth-child(3) { animation-delay: 0.3s; }

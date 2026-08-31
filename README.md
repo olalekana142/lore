@@ -129,6 +129,7 @@ Topic    --CONNECTED_TO-> Topic
 - **Onboarding playbooks** — a role generates a KB-grounded 14-day checklist plus quizzes graded against your real policies.
 - **Actionable workflows** — answers become actions ("file the IT request?") that dispatch a ticket (simulated; drop-in real Jira/Zendesk/Slack).
 - **Provenance** — click a cited fact to open the source document with the exact sentence highlighted.
+- **Auth + permission-aware answers** — users belong to groups; every `Document` has an `audience`. Answers, search, and the library are filtered so people only ever see (and get cited) what their groups permit; anonymous callers see public docs only. Passwords are salted PBKDF2; sessions are stateless HMAC tokens. *Demo users (seeded): `hr_admin`/`hr` (sees restricted HR docs), `alice`/`alice` (engineering), `sam`/`sam` (public only) — sign in and ask "What do Level 5 engineers earn?" to see access scoping in action.*
 
 The HTTP API mirrors these: `POST /ingest`, `POST /ask`, `GET /search`, `GET /stale`,
 `GET /topics`.
@@ -253,7 +254,7 @@ python -m lore.ingestion.pipeline --company acme --source sample_data/acme_pto_u
 - [x] **Phase 4 — More sources**: PDF/DOCX parsing ✅ · Google Drive connector ✅ · database connector
 - [x] **Phase 5 — Intelligence**: knowledge gaps + auto-draft ✅ · conflict/duplicate detection ✅ · ROI analytics ✅ · glossary ✅
 - [x] **Phase 6 — Trust & workflow**: conflict-at-upload ✅ · ownership/verification ✅ · escalate→learn ✅ · onboarding playbooks ✅ · actionable workflows ✅ · provenance highlighting ✅
-- [ ] **Phase 7 — Ops**: SSO/auth, per-team permissions, Slack bot, expert/people graph, real Jira/Slack action connectors, scheduled re-sync
+- [~] **Phase 7 — Ops**: auth + group permissions ✅ · per-thread DB connections ✅ · SSO · Slack bot · expert/people graph · real Jira/Slack action connectors · scheduled re-sync
 
 ---
 

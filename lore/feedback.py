@@ -1,50 +1,36 @@
-"""Answer feedback — thumbs up/down, appended to a JSONL log next to the graph.
+"""Answer feedback — thumbs up/down, stored as graph nodes.
 
-Kept deliberately simple (a flat log, not a graph node): it's write-mostly signal used
-to spot bad answers and, later, to tune retrieval. Reads back aggregate counts.
+Write-mostly signal used to spot bad answers and, later, tune retrieval. Kept in the graph
+(not a flat file) so writes are transactional and safe under concurrent requests.
 """
 
 from __future__ import annotations
 
-import json
+import uuid
 from datetime import datetime
 
-from lore.config import settings
+import kuzu
 
 
-def _path():
-    settings.ensure_db_dir()
-    return settings.db_path.parent / "feedback.jsonl"
-
-
-def record(company_id: str, question: str, answer: str, rating: str, note: str = "") -> None:
+def record(conn: kuzu.Connection, company_id: str, question: str, answer: str,
+           rating: str, note: str = "") -> None:
     """Append one feedback row. rating is 'up' or 'down'."""
-    row = {
-        "company_id": company_id,
-        "question": question,
-        "answer": answer,
-        "rating": "down" if rating == "down" else "up",
-        "note": note,
-        "ts": datetime.now().isoformat(),
-    }
-    with _path().open("a", encoding="utf-8") as f:
-        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    conn.execute(
+        """CREATE (f:Feedback {id:$id, company_id:$c, question:$q, answer:$a,
+                               rating:$r, note:$n, created_at:$t})""",
+        {"id": f"fb:{uuid.uuid4().hex}", "c": company_id, "q": question, "a": answer,
+         "r": "down" if rating == "down" else "up", "n": note, "t": datetime.now()},
+    )
 
 
-def summary(company_id: str) -> dict:
+def summary(conn: kuzu.Connection, company_id: str) -> dict:
     """Aggregate up/down counts for a company."""
-    up = down = 0
-    path = _path()
-    if path.exists():
-        for line in path.read_text(encoding="utf-8").splitlines():
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if row.get("company_id") != company_id:
-                continue
-            if row.get("rating") == "down":
-                down += 1
-            else:
-                up += 1
-    return {"up": up, "down": down}
+    res = conn.execute(
+        "MATCH (f:Feedback {company_id:$c}) RETURN f.rating AS r, count(*) AS n",
+        {"c": company_id},
+    )
+    counts = {"up": 0, "down": 0}
+    while res.has_next():
+        rating, n = res.get_next()
+        counts[rating if rating in counts else "up"] = int(n)
+    return counts

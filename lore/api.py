@@ -302,14 +302,14 @@ def ask_stream(req: AskRequest, authorization: str | None = Header(None)) -> Str
 
 @app.post("/feedback")
 def post_feedback(req: FeedbackRequest) -> dict:
-    feedback.record(req.company_id, req.question, req.answer, req.rating, req.note)
+    feedback.record(_db(), req.company_id, req.question, req.answer, req.rating, req.note)
     return {"ok": True}
 
 
 @app.get("/overview")
 def overview(company_id: str) -> dict:
     data = analytics.overview(_db(), company_id)
-    data["feedback"] = feedback.summary(company_id)
+    data["feedback"] = feedback.summary(_db(), company_id)
     return data
 
 
@@ -353,19 +353,19 @@ def verify_document(req: VerifyRequest) -> dict:
 @app.post("/escalate")
 def escalate(req: EscalateRequest) -> dict:
     """Forward an unanswered question to the human inbox."""
-    return escalations.create(req.company_id, req.question, req.asked_by)
+    return escalations.create(_db(), req.company_id, req.question, req.asked_by)
 
 
 @app.get("/escalations")
 def get_escalations(company_id: str) -> list[dict]:
-    return escalations.list_open(company_id)
+    return escalations.list_open(_db(), company_id)
 
 
 @app.post("/escalations/resolve")
 def resolve_escalation(req: ResolveRequest) -> dict:
     """HR answers -> saved into the knowledge base + escalation closed."""
     try:
-        return escalations.resolve(req.company_id, req.escalation_id, req.answer)
+        return escalations.resolve(_db(), req.company_id, req.escalation_id, req.answer)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -379,7 +379,7 @@ def actions_suggest(req: SuggestActionRequest) -> dict:
 @app.post("/actions/execute")
 def actions_execute(req: ExecuteActionRequest) -> dict:
     """Execute the request (currently simulated — logs + returns a ticket confirmation)."""
-    return actions.execute_action(req.company_id, req.type, req.summary, req.requested_by)
+    return actions.execute_action(_db(), req.company_id, req.type, req.summary, req.requested_by)
 
 
 @app.post("/onboarding/generate")

@@ -15,6 +15,8 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
+import kuzu
+
 from lore.config import settings
 from lore.llm import complete
 
@@ -45,11 +47,6 @@ _ROUTES = {
     "facilities": ("Facilities", "#facilities", "2 business days"),
     "other": ("Operations", "#ops", "2 business days"),
 }
-
-
-def _tickets_path():
-    settings.ensure_db_dir()
-    return settings.db_path.parent / "tickets.jsonl"
 
 
 def _safe_json(raw: str) -> dict:
@@ -84,35 +81,23 @@ def suggest_action(company_id: str, question: str, answer: str) -> dict:
     }
 
 
-def _count() -> int:
-    path = _tickets_path()
-    if not path.exists():
-        return 0
-    return sum(1 for _ in path.read_text(encoding="utf-8").splitlines())
+def _count(conn: kuzu.Connection, company_id: str) -> int:
+    res = conn.execute("MATCH (t:Ticket {company_id:$c}) RETURN count(t)", {"c": company_id})
+    return int(res.get_next()[0]) if res.has_next() else 0
 
 
-def execute_action(company_id: str, action_type: str, summary: str, requested_by: str = "") -> dict:
-    """Simulate filing the request; log it and return a realistic confirmation."""
+def execute_action(conn: kuzu.Connection, company_id: str, action_type: str,
+                   summary: str, requested_by: str = "") -> dict:
+    """Simulate filing the request; store the ticket and return a realistic confirmation."""
     dest, channel, eta = _ROUTES.get(action_type, _ROUTES["other"])
-    ticket_id = f"{company_id.upper()}-{1000 + _count() + 1}"
-    row = {
-        "ticket_id": ticket_id,
-        "company_id": company_id,
-        "type": action_type,
-        "summary": summary,
-        "requested_by": requested_by,
-        "destination": dest,
-        "channel": channel,
-        "status": "filed",
-        "created_at": datetime.now().isoformat(),
-    }
-    with _tickets_path().open("a", encoding="utf-8") as f:
-        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    ticket_id = f"{company_id.upper()}-{1000 + _count(conn, company_id) + 1}"
+    conn.execute(
+        """CREATE (t:Ticket {id:$id, company_id:$c, type:$ty, summary:$s, requested_by:$by,
+                             destination:$d, channel:$ch, status:'filed', created_at:$t})""",
+        {"id": ticket_id, "c": company_id, "ty": action_type, "s": summary,
+         "by": requested_by, "d": dest, "ch": channel, "t": datetime.now()},
+    )
     return {
-        "ticket_id": ticket_id,
-        "destination": dest,
-        "channel": channel,
-        "eta": eta,
-        "summary": summary,
-        "simulated": True,
+        "ticket_id": ticket_id, "destination": dest, "channel": channel,
+        "eta": eta, "summary": summary, "simulated": True,
     }

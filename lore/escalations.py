@@ -4,86 +4,76 @@ Flow: employee hits an undocumented question -> "Escalate to HR" -> the question
 an HR inbox -> HR writes the answer -> resolving it INGESTS that answer as a new document,
 so the next person who asks gets it automatically. Closes the human-in-the-loop gap.
 
-Stored as a JSONL log next to the graph (write-mostly, small).
+Stored as graph nodes (transactional; safe under concurrent create/resolve).
 """
 
 from __future__ import annotations
 
-import json
-import threading
+import uuid
 from datetime import datetime
 
-from lore.config import settings
+import kuzu
+
 from lore.ingestion.pipeline import ingest_text
 
-# Serialize the read-modify-write cycle so concurrent create/resolve calls can't clobber
-# each other's changes to the JSONL log.
-_lock = threading.Lock()
+
+def _row(vals) -> dict:
+    qid, question, asked_by, status, answer, created_at, resolved_at = vals
+    return {
+        "id": qid, "question": question, "asked_by": asked_by, "status": status,
+        "answer": answer, "created_at": created_at.isoformat() if created_at else None,
+        "resolved_at": resolved_at.isoformat() if resolved_at else None,
+    }
 
 
-def _path():
-    settings.ensure_db_dir()
-    return settings.db_path.parent / "escalations.jsonl"
+def create(conn: kuzu.Connection, company_id: str, question: str, asked_by: str = "") -> dict:
+    # de-dupe: if the same open question already exists, return it
+    for e in list_open(conn, company_id):
+        if e["question"].strip().lower() == question.strip().lower():
+            return e
+    row = {
+        "id": f"esc:{uuid.uuid4().hex}", "c": company_id, "q": question.strip(),
+        "by": asked_by.strip(), "t": datetime.now(),
+    }
+    conn.execute(
+        """CREATE (e:Escalation {id:$id, company_id:$c, question:$q, asked_by:$by,
+                                 status:'open', answer:'', created_at:$t, resolved_at:NULL})""",
+        row,
+    )
+    return {"id": row["id"], "company_id": company_id, "question": row["q"],
+            "asked_by": row["by"], "status": "open", "answer": "",
+            "created_at": row["t"].isoformat(), "resolved_at": None}
 
 
-def _read_all() -> list[dict]:
-    path = _path()
-    if not path.exists():
-        return []
-    rows = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        try:
-            rows.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return rows
+def list_open(conn: kuzu.Connection, company_id: str) -> list[dict]:
+    res = conn.execute(
+        """MATCH (e:Escalation {company_id:$c, status:'open'})
+           RETURN e.id, e.question, e.asked_by, e.status, e.answer, e.created_at, e.resolved_at
+           ORDER BY e.created_at DESC""",
+        {"c": company_id},
+    )
+    out = []
+    while res.has_next():
+        row = _row(res.get_next())
+        row["company_id"] = company_id
+        out.append(row)
+    return out
 
 
-def _write_all(rows: list[dict]) -> None:
-    with _path().open("w", encoding="utf-8") as f:
-        for r in rows:
-            f.write(json.dumps(r, ensure_ascii=False) + "\n")
-
-
-def create(company_id: str, question: str, asked_by: str = "") -> dict:
-    with _lock:
-        rows = _read_all()
-        # de-dupe: if the same open question already exists, just return it
-        for r in rows:
-            if r["company_id"] == company_id and r["status"] == "open" and \
-                    r["question"].strip().lower() == question.strip().lower():
-                return r
-        row = {
-            "id": f"esc-{len(rows) + 1}-{int(datetime.now().timestamp())}",
-            "company_id": company_id,
-            "question": question.strip(),
-            "asked_by": asked_by.strip(),
-            "status": "open",
-            "answer": "",
-            "created_at": datetime.now().isoformat(),
-            "resolved_at": None,
-        }
-        rows.append(row)
-        _write_all(rows)
-        return row
-
-
-def list_open(company_id: str) -> list[dict]:
-    return [r for r in _read_all() if r["company_id"] == company_id and r["status"] == "open"]
-
-
-def resolve(company_id: str, escalation_id: str, answer: str) -> dict:
+def resolve(conn: kuzu.Connection, company_id: str, escalation_id: str, answer: str) -> dict:
     """Save HR's answer as a knowledge-base document and close the escalation."""
-    with _lock:
-        rows = _read_all()
-        target = next(
-            (r for r in rows if r["id"] == escalation_id and r["company_id"] == company_id), None
-        )
-        if target is None:
-            raise ValueError("escalation not found")
-        summary = ingest_text(company_id, f"Q&A: {target['question']}", answer)
-        target["status"] = "resolved"
-        target["answer"] = answer
-        target["resolved_at"] = datetime.now().isoformat()
-        _write_all(rows)
-        return {"resolved": target, "ingest": summary}
+    res = conn.execute(
+        "MATCH (e:Escalation {id:$id, company_id:$c}) RETURN e.question",
+        {"id": escalation_id, "c": company_id},
+    )
+    if not res.has_next():
+        raise ValueError("escalation not found")
+    question = res.get_next()[0]
+
+    summary = ingest_text(company_id, f"Q&A: {question}", answer)
+    conn.execute(
+        "MATCH (e:Escalation {id:$id}) SET e.status='resolved', e.answer=$a, e.resolved_at=$t",
+        {"id": escalation_id, "a": answer, "t": datetime.now()},
+    )
+    return {"resolved": {"id": escalation_id, "question": question, "answer": answer},
+            "ingest": summary}

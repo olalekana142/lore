@@ -42,6 +42,20 @@ NODE_TABLES = [
     """CREATE NODE TABLE IF NOT EXISTS GlossaryTerm(
         id STRING, term STRING, definition STRING, PRIMARY KEY(id)
     )""",
+    """CREATE NODE TABLE IF NOT EXISTS Feedback(
+        id STRING, company_id STRING, question STRING, answer STRING,
+        rating STRING, note STRING, created_at TIMESTAMP, PRIMARY KEY(id)
+    )""",
+    """CREATE NODE TABLE IF NOT EXISTS Escalation(
+        id STRING, company_id STRING, question STRING, asked_by STRING,
+        status STRING, answer STRING, created_at TIMESTAMP, resolved_at TIMESTAMP,
+        PRIMARY KEY(id)
+    )""",
+    """CREATE NODE TABLE IF NOT EXISTS Ticket(
+        id STRING, company_id STRING, type STRING, summary STRING, requested_by STRING,
+        destination STRING, channel STRING, status STRING, created_at TIMESTAMP,
+        PRIMARY KEY(id)
+    )""",
     """CREATE NODE TABLE IF NOT EXISTS EmployeeQuestion(
         id STRING, text STRING, asked_count INT64, unanswered_count INT64,
         coverage DOUBLE, topic STRING, last_asked TIMESTAMP,

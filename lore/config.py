@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     # --- Trust / freshness ---
     review_days: int = 180         # a doc verified longer ago than this reads as "Unverified"
 
+    # --- Auth ---
+    secret_key: str = "dev-insecure-change-me-in-prod"  # signs session tokens; override in .env
+    session_hours: int = 24
+
     # --- Storage ---
     db_path: Path = Path("./data/lore.kuzu")
 

@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 
 from lore.graph.schema import get_connection, init_schema
-from lore.ingestion.pipeline import ingest
+from lore.ingestion.pipeline import ingest, ingest_text
 
 COMPANY = os.environ.get("LORE_SEED_COMPANY", "acme")
 _SAMPLES = [
@@ -68,6 +68,21 @@ def main() -> None:
                           ("upload:security-incident", "IT Security")]:
         analytics.verify_document(conn, doc_id, owner)
     print("[seed] verified 2 docs")
+
+    # Permissions demo: an HR-only document + a few users in different groups.
+    from lore import auth
+    comp = ingest_text(
+        COMPANY, "Compensation Bands 2026",
+        "Level 3 engineers earn between 120,000 and 150,000 dollars per year. Level 5 "
+        "engineers earn 180,000 to 220,000. Annual merit increases are capped at 8 percent. "
+        "Equity refresh grants vest over 4 years.",
+    )
+    for did in comp.get("doc_ids", []):
+        analytics.set_audience(conn, did, ["hr"])  # restricted: only the 'hr' group can see it
+    auth.create_user(conn, COMPANY, "alice", "alice", "Alice (Engineering)", ["engineering"])
+    auth.create_user(conn, COMPANY, "hr_admin", "hr", "HR Admin", ["hr"])
+    auth.create_user(conn, COMPANY, "sam", "sam", "Sam (New Hire)", [])
+    print("[seed] users: alice/alice, hr_admin/hr, sam/sam; comp doc restricted to 'hr'")
     print("[seed] done.")
 
 

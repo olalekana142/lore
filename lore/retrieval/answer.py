@@ -33,14 +33,17 @@ Rules:
 - Be concise and direct - this is for a busy coworker. Prefer short paragraphs or bullets."""
 
 
-def retrieve(conn: kuzu.Connection, company_id: str, question: str, top_k: int | None = None) -> dict:
+def retrieve(conn: kuzu.Connection, company_id: str, question: str,
+             top_k: int | None = None, groups: list[str] | None = None) -> dict:
     """Return the top facts for a question plus numbered source documents.
 
     Result: {query_vec, facts[], sources[], confidence, top_similarity, glossary[]}. Each
     source carries the fact statements retrieved from it, so the UI can show what a
     citation says. Known glossary terms in the question are expanded before embedding.
+    Only documents the caller's `groups` are permitted to see are considered.
     """
-    from lore.glossary import expand_query  # local import avoids a cycle
+    from lore.auth import can_see  # local import avoids a cycle
+    from lore.glossary import expand_query
 
     top_k = top_k or settings.answer_top_k
     expanded = expand_query(conn, company_id, question)
@@ -48,14 +51,15 @@ def retrieve(conn: kuzu.Connection, company_id: str, question: str, top_k: int |
     res = conn.execute(
         """MATCH (c:Company {id:$cid})-[:OWNS]->(d:Document)-[:STATES]->(f:Fact)
            RETURN f.id, f.statement, f.embedding,
-                  d.id, d.title, d.url, d.updated_at, d.version, d.owner, d.verified_at""",
+                  d.id, d.title, d.url, d.updated_at, d.version, d.owner, d.verified_at,
+                  d.audience""",
         {"cid": company_id},
     )
     verify_cutoff = datetime.now() - timedelta(days=settings.review_days)
     scored: list[dict] = []
     while res.has_next():
-        fid, statement, emb, did, title, url, updated_at, version, owner, verified_at = res.get_next()
-        if not emb:
+        fid, statement, emb, did, title, url, updated_at, version, owner, verified_at, audience = res.get_next()
+        if not emb or not can_see(audience, groups):
             continue
         sim = cosine(query_vec, emb)
         if sim < settings.min_relevance:

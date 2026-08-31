@@ -47,18 +47,24 @@ PAIRS:
 """
 
 
-def _active_facts(conn: kuzu.Connection, company_id: str) -> list[dict]:
+def _active_facts(conn: kuzu.Connection, company_id: str, groups: list[str] | None = None) -> list[dict]:
+    """Facts from visible docs. groups=None -> no filtering (admin/upload-time use)."""
+    from lore.auth import can_see
+
     res = conn.execute(
         """MATCH (c:Company {id:$cid})-[:OWNS]->(d:Document)-[:STATES]->(f:Fact)
-           RETURN f.id, f.statement, f.embedding, d.id, d.title""",
+           RETURN f.id, f.statement, f.embedding, d.id, d.title, d.audience""",
         {"cid": company_id},
     )
     out: list[dict] = []
     while res.has_next():
-        fid, statement, emb, did, title = res.get_next()
-        if emb:
-            out.append({"fact_id": fid, "statement": statement, "emb": emb,
-                        "doc_id": did, "title": title})
+        fid, statement, emb, did, title, audience = res.get_next()
+        if not emb:
+            continue
+        if groups is not None and not can_see(audience, groups):
+            continue
+        out.append({"fact_id": fid, "statement": statement, "emb": emb,
+                    "doc_id": did, "title": title})
     return out
 
 
@@ -149,9 +155,9 @@ def conflicts_for_docs(conn: kuzu.Connection, company_id: str, doc_ids: list[str
     return conflicts
 
 
-def content_health(conn: kuzu.Connection, company_id: str) -> dict:
-    """Return {conflicts:[...], duplicates:[...]} across the company's documents."""
-    facts = _active_facts(conn, company_id)
+def content_health(conn: kuzu.Connection, company_id: str, groups: list[str] | None = None) -> dict:
+    """Return {conflicts:[...], duplicates:[...]} across documents visible to `groups`."""
+    facts = _active_facts(conn, company_id, groups)
     pairs = _candidate_pairs(facts)
     verdicts = _classify(pairs)
 

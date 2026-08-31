@@ -26,8 +26,12 @@ NODE_TABLES = [
     """CREATE NODE TABLE IF NOT EXISTS Document(
         id STRING, title STRING, source STRING, url STRING,
         text STRING, version INT64, updated_at TIMESTAMP,
-        owner STRING, verified_at TIMESTAMP,
+        owner STRING, verified_at TIMESTAMP, audience STRING[],
         cited_count INT64, last_cited TIMESTAMP, PRIMARY KEY(id)
+    )""",
+    """CREATE NODE TABLE IF NOT EXISTS User(
+        id STRING, company_id STRING, username STRING, name STRING,
+        salt STRING, pw_hash STRING, groups STRING[], PRIMARY KEY(id)
     )""",
     """CREATE NODE TABLE IF NOT EXISTS Fact(
         id STRING, statement STRING, embedding DOUBLE[], PRIMARY KEY(id)

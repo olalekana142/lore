@@ -20,14 +20,15 @@ from __future__ import annotations
 import json
 import shutil
 import tempfile
+import threading
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from lore import actions, analytics, escalations, feedback, glossary, health, onboarding
+from lore import actions, analytics, auth, escalations, feedback, glossary, health, onboarding
 from lore.config import settings
 from lore.graph import queries
 from lore.graph.schema import get_connection, init_schema
@@ -45,7 +46,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_conn = init_schema(get_connection())
+# Kùzu Connections are NOT thread-safe, but the Database is and hands out many cheap
+# Connections. FastAPI serves sync endpoints on a threadpool, so we give each thread its
+# own Connection (created once, reused) instead of sharing one across threads.
+init_schema(get_connection())  # ensure the schema exists once at startup
+_local = threading.local()
+
+
+def _db():
+    conn = getattr(_local, "conn", None)
+    if conn is None:
+        conn = get_connection()
+        _local.conn = conn
+    return conn
 
 
 # ----------------------------------------------------------------- request models
@@ -133,10 +146,42 @@ class ExecuteActionRequest(BaseModel):
     requested_by: str = ""
 
 
+class RegisterRequest(BaseModel):
+    company_id: str
+    username: str
+    password: str
+    name: str = ""
+    groups: list[str] = []
+
+
+class LoginRequest(BaseModel):
+    company_id: str
+    username: str
+    password: str
+
+
+class AudienceRequest(BaseModel):
+    company_id: str
+    doc_id: str
+    audience: list[str]
+
+
+def _identity(company_fallback: str, authorization: str | None) -> tuple[str, list[str] | None]:
+    """Resolve (company_id, groups) from a bearer token; anonymous -> public docs only.
+
+    A valid token pins BOTH the company and the caller's groups (client can't spoof
+    either). Anonymous callers get groups=['everyone'] — they see only public documents.
+    """
+    tok = auth.parse_token(authorization)
+    if tok:
+        return tok["company_id"], tok["groups"]
+    return company_fallback, [auth.PUBLIC]
+
+
 def _with_conflicts(summary: dict) -> dict:
     """Attach any upload-time conflicts between the new doc(s) and existing policies."""
     summary["conflicts"] = health.conflicts_for_docs(
-        _conn, summary["company_id"], summary.get("doc_ids", [])
+        _db(), summary["company_id"], summary.get("doc_ids", [])
     )
     return summary
 
@@ -145,6 +190,38 @@ def _with_conflicts(summary: dict) -> dict:
 @app.get("/health")
 def healthcheck() -> dict:
     return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------- auth
+@app.post("/auth/register")
+def auth_register(req: RegisterRequest) -> dict:
+    """Create a user (demo-open; in production this is an admin action)."""
+    auth.create_user(_db(), req.company_id, req.username, req.password, req.name, req.groups)
+    return {"ok": True}
+
+
+@app.post("/auth/login")
+def auth_login(req: LoginRequest) -> dict:
+    user = auth.verify_login(_db(), req.company_id, req.username, req.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    token = auth.mint_token(req.company_id, user["username"], user["groups"])
+    return {"token": token, "company_id": req.company_id, "user": user}
+
+
+@app.get("/auth/me")
+def auth_me(authorization: str | None = Header(None)) -> dict:
+    tok = auth.parse_token(authorization)
+    if not tok:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return {"company_id": tok["company_id"], "username": tok["username"], "groups": tok["groups"]}
+
+
+@app.post("/documents/audience")
+def set_document_audience(req: AudienceRequest, authorization: str | None = Header(None)) -> dict:
+    """Set which groups can see a document ('everyone' = public)."""
+    analytics.set_audience(_db(), req.doc_id, req.audience)
+    return {"ok": True}
 
 
 @app.post("/ingest")
@@ -172,31 +249,33 @@ def ingest_drive_folder(req: DriveRequest) -> dict:
 
 
 @app.post("/ask")
-def ask(req: AskRequest) -> dict:
+def ask(req: AskRequest, authorization: str | None = Header(None)) -> dict:
     """One-shot cited answer (used by tools/tests); also logs the question."""
+    company_id, groups = _identity(req.company_id, authorization)
     history = [t.model_dump() for t in req.history]
-    r = retrieve(_conn, req.company_id, req.question)
+    r = retrieve(_db(), company_id, req.question, groups=groups)
     result = synthesize(req.question, r, history)
-    topic = analytics.primary_topic(_conn, result["sources"][0]["doc_id"]) if result["sources"] else "General"
+    topic = analytics.primary_topic(_db(), result["sources"][0]["doc_id"]) if result["sources"] else "General"
     analytics.log_question(
-        _conn, req.company_id, req.question, r["query_vec"],
+        _db(), company_id, req.question, r["query_vec"],
         coverage=r["top_similarity"], answered=bool(result["sources"]), topic=topic,
     )
-    analytics.record_citations(_conn, [s["doc_id"] for s in result["sources"]])
+    analytics.record_citations(_db(), [s["doc_id"] for s in result["sources"]])
     return result
 
 
 @app.post("/ask/stream")
-def ask_stream(req: AskRequest) -> StreamingResponse:
+def ask_stream(req: AskRequest, authorization: str | None = Header(None)) -> StreamingResponse:
     """Conversational streaming answer as NDJSON lines:
 
         {"type":"sources","sources":[...],"confidence":"..."}
         {"type":"token","t":"..."}   (repeated)
         {"type":"done","sources":[...]}   (only the citations actually used)
     """
-    company_id, question = req.company_id, req.question
+    company_id, groups = _identity(req.company_id, authorization)
+    question = req.question
     history = [t.model_dump() for t in req.history]
-    r = retrieve(_conn, company_id, question)
+    r = retrieve(_db(), company_id, question, groups=groups)
 
     def gen():
         yield json.dumps({"type": "sources", "sources": r["sources"],
@@ -210,12 +289,12 @@ def ask_stream(req: AskRequest) -> StreamingResponse:
         full = "".join(pieces)
         cited = cited_sources(full, r["sources"])
         # Log after synthesis: "answered" = the reply actually cited a source.
-        topic = analytics.primary_topic(_conn, cited[0]["doc_id"]) if cited else "General"
+        topic = analytics.primary_topic(_db(), cited[0]["doc_id"]) if cited else "General"
         analytics.log_question(
-            _conn, company_id, question, r["query_vec"],
+            _db(), company_id, question, r["query_vec"],
             coverage=r["top_similarity"], answered=bool(cited), topic=topic,
         )
-        analytics.record_citations(_conn, [s["doc_id"] for s in cited])
+        analytics.record_citations(_db(), [s["doc_id"] for s in cited])
         yield json.dumps({"type": "done", "sources": cited}) + "\n"
 
     return StreamingResponse(gen(), media_type="application/x-ndjson")
@@ -229,14 +308,14 @@ def post_feedback(req: FeedbackRequest) -> dict:
 
 @app.get("/overview")
 def overview(company_id: str) -> dict:
-    data = analytics.overview(_conn, company_id)
+    data = analytics.overview(_db(), company_id)
     data["feedback"] = feedback.summary(company_id)
     return data
 
 
 @app.get("/gaps")
 def gaps(company_id: str) -> list[dict]:
-    return analytics.knowledge_gaps(_conn, company_id)
+    return analytics.knowledge_gaps(_db(), company_id)
 
 
 @app.post("/gaps/draft")
@@ -255,18 +334,19 @@ def ingest_text_doc(req: TextRequest) -> dict:
 
 
 @app.get("/content-health")
-def content_health(company_id: str) -> dict:
+def content_health(company_id: str, authorization: str | None = Header(None)) -> dict:
     """Conflicts + duplicates across docs, plus never-cited and stale docs."""
-    result = health.content_health(_conn, company_id)
-    result["never_cited"] = analytics.never_cited_docs(_conn, company_id)
-    result["stale"] = queries.find_stale_docs(_conn, company_id)
+    cid, groups = _identity(company_id, authorization)
+    result = health.content_health(_db(), cid, groups=groups)
+    result["never_cited"] = analytics.never_cited_docs(_db(), cid)
+    result["stale"] = queries.find_stale_docs(_db(), cid)
     return result
 
 
 @app.post("/documents/verify")
 def verify_document(req: VerifyRequest) -> dict:
     """Mark a document reviewed/verified now, with an owner (Trust: ownership)."""
-    analytics.verify_document(_conn, req.doc_id, req.owner)
+    analytics.verify_document(_db(), req.doc_id, req.owner)
     return {"ok": True}
 
 
@@ -305,54 +385,57 @@ def actions_execute(req: ExecuteActionRequest) -> dict:
 @app.post("/onboarding/generate")
 def onboarding_generate(req: PlaybookRequest) -> dict:
     """Build a role-specific onboarding playbook (checklist + quiz) from the KB."""
-    return onboarding.generate_playbook(_conn, req.company_id, req.role, req.name)
+    return onboarding.generate_playbook(_db(), req.company_id, req.role, req.name)
 
 
 @app.post("/onboarding/grade")
 def onboarding_grade(req: GradeRequest) -> dict:
     """Grade a new hire's answer to a quiz question against the knowledge base."""
-    return onboarding.grade_answer(_conn, req.company_id, req.question, req.answer)
+    return onboarding.grade_answer(_db(), req.company_id, req.question, req.answer)
 
 
 @app.get("/glossary")
 def get_glossary(company_id: str) -> list[dict]:
-    return glossary.list_terms(_conn, company_id)
+    return glossary.list_terms(_db(), company_id)
 
 
 @app.post("/glossary")
 def add_glossary(req: GlossaryRequest) -> dict:
-    glossary.add_term(_conn, req.company_id, req.term, req.definition)
+    glossary.add_term(_db(), req.company_id, req.term, req.definition)
     return {"ok": True}
 
 
 @app.get("/questions")
 def questions(company_id: str) -> list[dict]:
-    return analytics.top_questions(_conn, company_id)
+    return analytics.top_questions(_db(), company_id)
 
 
 @app.get("/documents")
-def documents(company_id: str) -> list[dict]:
-    return analytics.list_documents(_conn, company_id)
+def documents(company_id: str, authorization: str | None = Header(None)) -> list[dict]:
+    cid, groups = _identity(company_id, authorization)
+    return analytics.list_documents(_db(), cid, groups=groups)
 
 
 @app.get("/documents/{doc_id:path}")
-def document(doc_id: str, company_id: str) -> dict:
-    doc = analytics.get_document(_conn, company_id, doc_id)
+def document(doc_id: str, company_id: str, authorization: str | None = Header(None)) -> dict:
+    cid, groups = _identity(company_id, authorization)
+    doc = analytics.get_document(_db(), cid, doc_id, groups=groups)
     if doc is None:
         raise HTTPException(status_code=404, detail="document not found")
     return doc
 
 
 @app.get("/search")
-def search(company_id: str, query: str, top_k: int = 8) -> list[dict]:
-    return deep_search_facts(_conn, company_id, query, top_k)
+def search(company_id: str, query: str, top_k: int = 8, authorization: str | None = Header(None)) -> list[dict]:
+    cid, groups = _identity(company_id, authorization)
+    return deep_search_facts(_db(), cid, query, top_k, groups=groups)
 
 
 @app.get("/stale")
 def stale(company_id: str, stale_after_days: int = 180) -> list[dict]:
-    return queries.find_stale_docs(_conn, company_id, stale_after_days)
+    return queries.find_stale_docs(_db(), company_id, stale_after_days)
 
 
 @app.get("/topics")
 def topics(company_id: str) -> list[dict]:
-    return queries.topic_coverage(_conn, company_id)
+    return queries.topic_coverage(_db(), company_id)

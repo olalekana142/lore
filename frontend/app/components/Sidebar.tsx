@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCompany } from "@/lib/useCompany";
 import { useTheme } from "@/lib/useTheme";
+import { useAuth } from "@/lib/useAuth";
+import { logout as apiLogout } from "@/lib/api";
 import {
   IconHome,
   IconChat,
@@ -28,8 +30,16 @@ const NAV = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [companyId, setCompanyId, ready] = useCompany();
   const [theme, toggleTheme, themeReady] = useTheme();
+  const { user, refresh } = useAuth();
+
+  const signOut = () => {
+    apiLogout();
+    refresh();
+    router.push("/login");
+  };
 
   return (
     <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col gap-6 border-r border-border bg-surface/70 px-3 py-5 backdrop-blur-xl">
@@ -75,22 +85,40 @@ export default function Sidebar() {
           {themeReady ? (theme === "dark" ? "Light mode" : "Dark mode") : "Theme"}
         </button>
 
-        <div className="card p-3">
-          <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-dim">
-            Workspace
-          </label>
-          <div className="mt-2 flex items-center gap-2">
-            <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent text-xs font-bold text-accent-fg">
-              {ready ? companyId.charAt(0).toUpperCase() : "…"}
+        {user ? (
+          <div className="card p-3">
+            <div className="flex items-center gap-2">
+              <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent text-xs font-bold text-accent-fg">
+                {user.name.charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-semibold">{user.name}</div>
+                <div className="truncate text-[10px] text-muted-dim">
+                  {user.company_id} · {user.groups.length ? user.groups.join(", ") : "no groups"}
+                </div>
+              </div>
             </div>
-            <input
-              value={ready ? companyId : ""}
-              onChange={(e) => setCompanyId(e.target.value.trim() || "acme")}
-              className="input w-full px-2.5 py-1.5 text-sm"
-              placeholder="company id"
-            />
+            <button onClick={signOut} className="mt-2 w-full rounded-lg border border-border py-1.5 text-xs font-medium text-muted transition-colors hover:border-accent hover:text-foreground">
+              Sign out
+            </button>
           </div>
-        </div>
+        ) : (
+          <div className="card p-3">
+            <div className="mb-2 flex items-center gap-2">
+              <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-2 text-xs font-bold text-muted-dim">?</div>
+              <input
+                value={ready ? companyId : ""}
+                onChange={(e) => setCompanyId(e.target.value.trim() || "acme")}
+                className="input w-full px-2.5 py-1.5 text-sm"
+                placeholder="company id"
+              />
+            </div>
+            <Link href="/login" className="block w-full rounded-lg bg-accent py-1.5 text-center text-xs font-semibold text-accent-fg">
+              Sign in
+            </Link>
+            <p className="mt-1.5 text-[10px] leading-relaxed text-muted-dim">Anonymous — public documents only.</p>
+          </div>
+        )}
       </div>
     </aside>
   );

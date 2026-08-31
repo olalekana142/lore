@@ -3,6 +3,19 @@
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
+// --- session token (permission-aware requests) ---
+export function getToken(): string | null {
+  try {
+    return localStorage.getItem("lore.token");
+  } catch {
+    return null;
+  }
+}
+function authHeader(): Record<string, string> {
+  const t = getToken();
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
 export type Confidence = "high" | "medium" | "low" | "none";
 
 export interface Source {
@@ -47,6 +60,7 @@ export interface DocSummary {
   owner: string | null;
   verified: boolean;
   verified_at: string | null;
+  audience: string[];
   facts: number;
   topics: string[];
 }
@@ -229,7 +243,40 @@ export async function getGaps(companyId: string): Promise<Gap[]> {
 }
 
 export async function getContentHealth(companyId: string): Promise<ContentHealth> {
-  return j(await fetch(`${BASE}/content-health?${qs({ company_id: companyId })}`));
+  return j(await fetch(`${BASE}/content-health?${qs({ company_id: companyId })}`, { headers: authHeader() }));
+}
+
+// --- auth ---
+export interface AuthUser {
+  username: string;
+  name: string;
+  groups: string[];
+}
+
+export async function login(companyId: string, username: string, password: string): Promise<{ token: string; company_id: string; user: AuthUser }> {
+  const res = await j<{ token: string; company_id: string; user: AuthUser }>(
+    await fetch(`${BASE}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company_id: companyId, username, password }),
+    }),
+  );
+  try {
+    localStorage.setItem("lore.token", res.token);
+    localStorage.setItem("lore.user", JSON.stringify({ ...res.user, company_id: res.company_id }));
+  } catch {
+    /* ignore */
+  }
+  return res;
+}
+
+export function logout(): void {
+  try {
+    localStorage.removeItem("lore.token");
+    localStorage.removeItem("lore.user");
+  } catch {
+    /* ignore */
+  }
 }
 
 export async function draftGapAnswer(companyId: string, question: string): Promise<Draft> {
@@ -335,11 +382,19 @@ export async function addGlossaryTerm(companyId: string, term: string, definitio
 }
 
 export async function getDocuments(companyId: string): Promise<DocSummary[]> {
-  return j(await fetch(`${BASE}/documents?${qs({ company_id: companyId })}`));
+  return j(await fetch(`${BASE}/documents?${qs({ company_id: companyId })}`, { headers: authHeader() }));
 }
 
 export async function getDocument(companyId: string, docId: string): Promise<DocDetail> {
-  return j(await fetch(`${BASE}/documents/${docId}?${qs({ company_id: companyId })}`));
+  return j(await fetch(`${BASE}/documents/${docId}?${qs({ company_id: companyId })}`, { headers: authHeader() }));
+}
+
+export async function setAudience(companyId: string, docId: string, audience: string[]): Promise<void> {
+  await fetch(`${BASE}/documents/audience`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeader() },
+    body: JSON.stringify({ company_id: companyId, doc_id: docId, audience }),
+  });
 }
 
 export async function sendFeedback(
@@ -373,7 +428,7 @@ export async function askStream(
   try {
     const res = await fetch(`${BASE}/ask/stream`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeader() },
       body: JSON.stringify({ company_id: companyId, question, history }),
       signal,
     });

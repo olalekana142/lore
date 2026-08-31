@@ -99,6 +99,38 @@ def test_drive_adapter_maps_files(monkeypatch):
     assert doc.updated_at is not None and doc.updated_at.year == 2026
 
 
+def test_password_hashing_roundtrip():
+    from lore.auth import hash_password, verify_password
+
+    salt, h = hash_password("s3cret!")
+    assert verify_password("s3cret!", salt, h)
+    assert not verify_password("wrong", salt, h)
+    salt2, h2 = hash_password("s3cret!")
+    assert salt != salt2 and h != h2  # salted: never the same digest twice
+
+
+def test_session_token_roundtrip_and_tamper():
+    from lore.auth import mint_token, parse_token
+
+    tok = mint_token("acme", "hr_admin", ["hr"])
+    parsed = parse_token("Bearer " + tok)
+    assert parsed == {"company_id": "acme", "username": "hr_admin", "groups": ["hr"]}
+    assert parse_token(tok[:-2] + "zz") is None  # tampered signature rejected
+    assert parse_token("garbage") is None
+    assert parse_token(None) is None
+
+
+def test_permission_can_see():
+    from lore.auth import can_see
+
+    assert can_see(["everyone"], [])           # public doc, anonymous
+    assert can_see(None, [])                    # default audience is public
+    assert can_see(["hr"], ["hr", "eng"])       # group member
+    assert can_see(["everyone", "hr"], ["eng"])  # public wins
+    assert not can_see(["hr"], ["eng"])         # wrong group -> hidden
+    assert not can_see(["hr"], [])              # anonymous -> hidden
+
+
 def test_embed_is_deterministic_and_normalized():
     a, b = embed_text("how many PTO days do I get"), embed_text("how many PTO days do I get")
     assert cosine(a, b) > 0.999  # identical text -> identical vector

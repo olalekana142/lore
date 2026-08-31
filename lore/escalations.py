@@ -10,10 +10,15 @@ Stored as a JSONL log next to the graph (write-mostly, small).
 from __future__ import annotations
 
 import json
+import threading
 from datetime import datetime
 
 from lore.config import settings
 from lore.ingestion.pipeline import ingest_text
+
+# Serialize the read-modify-write cycle so concurrent create/resolve calls can't clobber
+# each other's changes to the JSONL log.
+_lock = threading.Lock()
 
 
 def _path():
@@ -41,25 +46,26 @@ def _write_all(rows: list[dict]) -> None:
 
 
 def create(company_id: str, question: str, asked_by: str = "") -> dict:
-    rows = _read_all()
-    # de-dupe: if the same open question already exists, just return it
-    for r in rows:
-        if r["company_id"] == company_id and r["status"] == "open" and \
-                r["question"].strip().lower() == question.strip().lower():
-            return r
-    row = {
-        "id": f"esc-{len(rows) + 1}-{int(datetime.now().timestamp())}",
-        "company_id": company_id,
-        "question": question.strip(),
-        "asked_by": asked_by.strip(),
-        "status": "open",
-        "answer": "",
-        "created_at": datetime.now().isoformat(),
-        "resolved_at": None,
-    }
-    rows.append(row)
-    _write_all(rows)
-    return row
+    with _lock:
+        rows = _read_all()
+        # de-dupe: if the same open question already exists, just return it
+        for r in rows:
+            if r["company_id"] == company_id and r["status"] == "open" and \
+                    r["question"].strip().lower() == question.strip().lower():
+                return r
+        row = {
+            "id": f"esc-{len(rows) + 1}-{int(datetime.now().timestamp())}",
+            "company_id": company_id,
+            "question": question.strip(),
+            "asked_by": asked_by.strip(),
+            "status": "open",
+            "answer": "",
+            "created_at": datetime.now().isoformat(),
+            "resolved_at": None,
+        }
+        rows.append(row)
+        _write_all(rows)
+        return row
 
 
 def list_open(company_id: str) -> list[dict]:
@@ -68,16 +74,16 @@ def list_open(company_id: str) -> list[dict]:
 
 def resolve(company_id: str, escalation_id: str, answer: str) -> dict:
     """Save HR's answer as a knowledge-base document and close the escalation."""
-    rows = _read_all()
-    target = next(
-        (r for r in rows if r["id"] == escalation_id and r["company_id"] == company_id), None
-    )
-    if target is None:
-        raise ValueError("escalation not found")
-
-    summary = ingest_text(company_id, f"Q&A: {target['question']}", answer)
-    target["status"] = "resolved"
-    target["answer"] = answer
-    target["resolved_at"] = datetime.now().isoformat()
-    _write_all(rows)
-    return {"resolved": target, "ingest": summary}
+    with _lock:
+        rows = _read_all()
+        target = next(
+            (r for r in rows if r["id"] == escalation_id and r["company_id"] == company_id), None
+        )
+        if target is None:
+            raise ValueError("escalation not found")
+        summary = ingest_text(company_id, f"Q&A: {target['question']}", answer)
+        target["status"] = "resolved"
+        target["answer"] = answer
+        target["resolved_at"] = datetime.now().isoformat()
+        _write_all(rows)
+        return {"resolved": target, "ingest": summary}

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { getDocument, verifyDocument, type DocDetail } from "@/lib/api";
+import { getDocument, verifyDocument, setAudience, type DocDetail } from "@/lib/api";
 import { useCompany } from "@/lib/useCompany";
 import { relativeDate } from "@/lib/format";
 import { ErrorNote } from "../../components/ui";
@@ -30,6 +30,43 @@ function splitForHighlight(text: string, q: string | null): [string, string, str
   const idx = text.indexOf(best);
   if (idx < 0) return null;
   return [text.slice(0, idx), best.trim(), text.slice(idx + best.length)];
+}
+
+function AudienceBar({ doc, companyId, onDone }: { doc: DocDetail; companyId: string; onDone: () => void }) {
+  const isPublic = !doc.audience || doc.audience.includes("everyone");
+  const [value, setValue] = useState((doc.audience ?? ["everyone"]).join(", "));
+  const [busy, setBusy] = useState(false);
+
+  async function save(next: string) {
+    setBusy(true);
+    try {
+      const groups = next.split(",").map((g) => g.trim()).filter(Boolean);
+      await setAudience(companyId, doc.doc_id, groups.length ? groups : ["everyone"]);
+      onDone();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mb-1 mt-2 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface-2 p-3">
+      <span className="inline-flex items-center gap-1.5 text-sm font-medium">
+        {isPublic ? "🌐 Visible to everyone" : `🔒 Restricted to: ${doc.audience?.join(", ")}`}
+      </span>
+      <div className="ml-auto flex items-center gap-2">
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="everyone, or hr, finance…"
+          className="input w-52 px-3 py-1.5 text-sm"
+        />
+        <button onClick={() => save(value)} disabled={busy} className="btn-ghost px-3 py-1.5 text-sm">Set access</button>
+        {!isPublic && (
+          <button onClick={() => { setValue("everyone"); save("everyone"); }} disabled={busy} className="btn-ghost px-3 py-1.5 text-sm">Make public</button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function VerifyBar({ doc, companyId, onDone }: { doc: DocDetail; companyId: string; onDone: () => void }) {
@@ -146,6 +183,7 @@ export default function DocumentPage() {
           </header>
 
           <VerifyBar doc={doc} companyId={companyId} onDone={load} />
+          <AudienceBar doc={doc} companyId={companyId} onDone={load} />
 
           <section className="mb-5 mt-5">
             <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold">

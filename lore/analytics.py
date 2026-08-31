@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 
 import kuzu
 
+from lore.auth import can_see
 from lore.config import settings
 from lore.graph.queries import find_stale_docs, topic_coverage
 from lore.ingestion.embed import cosine
@@ -275,14 +276,14 @@ def overview(conn: kuzu.Connection, company_id: str) -> dict:
     }
 
 
-def list_documents(conn: kuzu.Connection, company_id: str) -> list[dict]:
-    """Every document with its fact count, topics, version and freshness."""
+def list_documents(conn: kuzu.Connection, company_id: str, groups: list[str] | None = None) -> list[dict]:
+    """Every document (visible to `groups`) with its fact count, topics, version, freshness."""
     res = conn.execute(
         """MATCH (c:Company {id:$cid})-[:OWNS]->(d:Document)
            OPTIONAL MATCH (d)-[:STATES]->(f:Fact)
            OPTIONAL MATCH (d)-[:ABOUT]->(t:Topic)
            RETURN d.id, d.title, d.source, d.url, d.version, d.updated_at,
-                  d.owner, d.verified_at,
+                  d.owner, d.verified_at, d.audience,
                   count(DISTINCT f) AS facts, collect(DISTINCT t.name) AS topics
            ORDER BY d.updated_at DESC""",
         {"cid": company_id},
@@ -290,7 +291,9 @@ def list_documents(conn: kuzu.Connection, company_id: str) -> list[dict]:
     cutoff = datetime.now() - timedelta(days=settings.review_days)
     out: list[dict] = []
     while res.has_next():
-        did, title, source, url, version, updated_at, owner, verified_at, facts, topics = res.get_next()
+        did, title, source, url, version, updated_at, owner, verified_at, audience, facts, topics = res.get_next()
+        if not can_see(audience, groups):
+            continue
         out.append(
             {
                 "doc_id": did, "title": title, "source": source, "url": url or None,
@@ -298,23 +301,30 @@ def list_documents(conn: kuzu.Connection, company_id: str) -> list[dict]:
                 "owner": owner or None,
                 "verified": bool(verified_at and verified_at >= cutoff),
                 "verified_at": verified_at.isoformat() if verified_at else None,
+                "audience": audience or ["everyone"],
                 "facts": facts, "topics": [t for t in topics if t],
             }
         )
     return out
 
 
-def get_document(conn: kuzu.Connection, company_id: str, doc_id: str) -> dict | None:
-    """Full document detail: text, extracted facts, topics, version, freshness."""
+def get_document(conn: kuzu.Connection, company_id: str, doc_id: str,
+                 groups: list[str] | None = None) -> dict | None:
+    """Full document detail: text, extracted facts, topics, version, freshness.
+
+    Returns None if the doc doesn't exist OR the caller's groups can't see it.
+    """
     res = conn.execute(
         """MATCH (c:Company {id:$cid})-[:OWNS]->(d:Document {id:$did})
            RETURN d.title, d.source, d.url, d.text, d.version, d.updated_at,
-                  d.owner, d.verified_at""",
+                  d.owner, d.verified_at, d.audience""",
         {"cid": company_id, "did": doc_id},
     )
     if not res.has_next():
         return None
-    title, source, url, text, version, updated_at, owner, verified_at = res.get_next()
+    title, source, url, text, version, updated_at, owner, verified_at, audience = res.get_next()
+    if not can_see(audience, groups):
+        return None
     cutoff = datetime.now() - timedelta(days=settings.review_days)
 
     fres = conn.execute(
@@ -334,8 +344,15 @@ def get_document(conn: kuzu.Connection, company_id: str, doc_id: str) -> dict | 
         "owner": owner or None,
         "verified": bool(verified_at and verified_at >= cutoff),
         "verified_at": verified_at.isoformat() if verified_at else None,
+        "audience": audience or ["everyone"],
         "facts": facts, "topics": topics,
     }
+
+
+def set_audience(conn: kuzu.Connection, doc_id: str, audience: list[str]) -> None:
+    """Set which groups can see a document ('everyone' = public)."""
+    aud = audience or ["everyone"]
+    conn.execute("MATCH (d:Document {id:$id}) SET d.audience=$aud", {"id": doc_id, "aud": aud})
 
 
 # ---------------------------------------------------------------------- helpers

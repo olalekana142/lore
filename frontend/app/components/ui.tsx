@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Link from "next/link";
 import type { Confidence, Source } from "@/lib/api";
 import { relativeDate } from "@/lib/format";
 import { IconExternal } from "./icons";
@@ -35,9 +36,9 @@ export function ConfidenceBadge({ confidence }: { confidence: Confidence }) {
 }
 
 export function SourceCard({ source, highlight }: { source: Source; highlight?: boolean }) {
-  const inner = (
+  return (
     <div
-      className={`card p-3.5 transition-colors ${highlight ? "!border-accent" : "card-hover"}`}
+      className={`card p-3.5 transition-colors ${highlight ? "!border-accent" : ""}`}
       id={`source-${source.n}`}
     >
       <div className="flex items-start gap-3">
@@ -46,17 +47,39 @@ export function SourceCard({ source, highlight }: { source: Source; highlight?: 
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className="truncate text-sm font-semibold">{source.title}</span>
-            {source.url && <IconExternal size={13} />}
+            <Link href={`/library/${source.doc_id}`} className="truncate text-sm font-semibold hover:text-accent">
+              {source.title}
+            </Link>
+            {source.url && (
+              <a href={source.url} target="_blank" rel="noreferrer" className="text-muted-dim hover:text-accent">
+                <IconExternal size={13} />
+              </a>
+            )}
           </div>
-          <div className="mt-0.5 text-[11px] text-muted-dim">
-            v{source.version} · updated {relativeDate(source.updated_at)}
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-dim">
+            <span>v{source.version} · updated {relativeDate(source.updated_at)}</span>
+            {source.verified ? (
+              <span className="inline-flex items-center gap-0.5 font-medium" style={{ color: "var(--green)" }}>
+                ✓ Verified{source.owner ? ` · ${source.owner}` : ""}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-0.5 font-medium" style={{ color: "var(--amber)" }}>
+                ⚠ Unverified
+              </span>
+            )}
           </div>
           {source.facts?.length > 0 && (
             <ul className="mt-2 space-y-1">
               {source.facts.slice(0, 3).map((f, i) => (
-                <li key={i} className="border-l-2 border-border pl-2.5 text-xs leading-relaxed text-muted">
-                  {f}
+                <li key={i}>
+                  <Link
+                    href={`/library/${source.doc_id}?q=${encodeURIComponent(f)}`}
+                    className="group block border-l-2 border-border pl-2.5 text-xs leading-relaxed text-muted transition-colors hover:border-accent hover:text-foreground"
+                    title="See this in the source document"
+                  >
+                    {f}
+                    <span className="ml-1 text-accent opacity-0 transition-opacity group-hover:opacity-100">↗</span>
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -64,13 +87,6 @@ export function SourceCard({ source, highlight }: { source: Source; highlight?: 
         </div>
       </div>
     </div>
-  );
-  return source.url ? (
-    <a href={source.url} target="_blank" rel="noreferrer" className="block">
-      {inner}
-    </a>
-  ) : (
-    inner
   );
 }
 

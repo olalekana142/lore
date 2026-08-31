@@ -12,7 +12,16 @@ export interface Source {
   url: string | null;
   updated_at: string | null;
   version: number;
+  owner: string | null;
+  verified: boolean;
   facts: string[];
+}
+
+export interface ConflictPair {
+  a: { statement: string; doc_id: string; title: string };
+  b: { statement: string; doc_id: string; title: string };
+  similarity: number;
+  reason: string;
 }
 
 export interface Turn {
@@ -24,6 +33,8 @@ export interface IngestSummary {
   company_id: string;
   documents_ingested: number;
   facts_extracted: number;
+  doc_ids?: string[];
+  conflicts?: ConflictPair[];
 }
 
 export interface DocSummary {
@@ -33,6 +44,9 @@ export interface DocSummary {
   url: string | null;
   version: number;
   updated_at: string | null;
+  owner: string | null;
+  verified: boolean;
+  verified_at: string | null;
   facts: number;
   topics: string[];
 }
@@ -40,6 +54,23 @@ export interface DocSummary {
 export interface DocDetail extends Omit<DocSummary, "facts"> {
   text: string;
   facts: string[];
+}
+
+export interface Escalation {
+  id: string;
+  company_id: string;
+  question: string;
+  asked_by: string;
+  status: string;
+  answer: string;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export interface TopicShare {
+  topic: string;
+  count: number;
+  pct: number;
 }
 
 export interface Gap {
@@ -63,6 +94,20 @@ export interface StaleDoc {
   updated_at: string | null;
 }
 
+export interface Roi {
+  asked: number;
+  answered: number;
+  unanswered: number;
+  deflection_rate: number;
+  minutes_saved: number;
+}
+
+export interface CitedDoc {
+  doc_id: string;
+  title: string;
+  cited_count: number;
+}
+
 export interface Overview {
   documents: number;
   facts: number;
@@ -70,11 +115,76 @@ export interface Overview {
   questions_asked: number;
   stale_count: number;
   gaps_count: number;
+  never_cited_count: number;
+  roi: Roi;
   top_topics: TopicCoverage[];
   top_questions: Gap[];
   top_gaps: Gap[];
   stale_docs: StaleDoc[];
+  most_cited: CitedDoc[];
+  questions_by_topic: TopicShare[];
   feedback: { up: number; down: number };
+}
+
+export interface FactRef {
+  statement: string;
+  doc_id: string;
+  title: string;
+}
+export interface HealthPair {
+  a: FactRef;
+  b: FactRef;
+  similarity: number;
+  reason: string;
+}
+export interface ContentHealth {
+  conflicts: HealthPair[];
+  duplicates: HealthPair[];
+  never_cited: { doc_id: string; title: string; updated_at: string | null }[];
+  stale: StaleDoc[];
+}
+export interface GlossaryTerm {
+  term: string;
+  definition: string;
+}
+export interface Draft {
+  title: string;
+  text: string;
+  question: string;
+}
+
+export interface ChecklistItem {
+  day: number;
+  task: string;
+  why: string;
+  topic: string;
+}
+export interface Playbook {
+  role: string;
+  name: string;
+  checklist: ChecklistItem[];
+  quiz: { question: string }[];
+}
+export interface Grade {
+  verdict: "correct" | "partial" | "incorrect";
+  score: number;
+  feedback: string;
+  model_answer: string;
+}
+
+export interface ActionSuggestion {
+  actionable: boolean;
+  type?: string;
+  label?: string;
+  summary?: string;
+}
+export interface Ticket {
+  ticket_id: string;
+  destination: string;
+  channel: string;
+  eta: string;
+  summary: string;
+  simulated: boolean;
 }
 
 async function j<T>(res: Response): Promise<T> {
@@ -116,6 +226,112 @@ export async function getOverview(companyId: string): Promise<Overview> {
 
 export async function getGaps(companyId: string): Promise<Gap[]> {
   return j(await fetch(`${BASE}/gaps?${qs({ company_id: companyId })}`));
+}
+
+export async function getContentHealth(companyId: string): Promise<ContentHealth> {
+  return j(await fetch(`${BASE}/content-health?${qs({ company_id: companyId })}`));
+}
+
+export async function draftGapAnswer(companyId: string, question: string): Promise<Draft> {
+  return j(
+    await fetch(`${BASE}/gaps/draft`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company_id: companyId, question }),
+    }),
+  );
+}
+
+export async function ingestText(companyId: string, title: string, text: string): Promise<IngestSummary> {
+  return j(
+    await fetch(`${BASE}/ingest-text`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company_id: companyId, title, text }),
+    }),
+  );
+}
+
+export async function verifyDocument(companyId: string, docId: string, owner: string): Promise<void> {
+  await fetch(`${BASE}/documents/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ company_id: companyId, doc_id: docId, owner }),
+  });
+}
+
+export async function escalate(companyId: string, question: string, askedBy = ""): Promise<Escalation> {
+  return j(
+    await fetch(`${BASE}/escalate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company_id: companyId, question, asked_by: askedBy }),
+    }),
+  );
+}
+
+export async function getEscalations(companyId: string): Promise<Escalation[]> {
+  return j(await fetch(`${BASE}/escalations?${qs({ company_id: companyId })}`));
+}
+
+export async function resolveEscalation(companyId: string, escalationId: string, answer: string): Promise<void> {
+  await fetch(`${BASE}/escalations/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ company_id: companyId, escalation_id: escalationId, answer }),
+  });
+}
+
+export async function suggestAction(companyId: string, question: string, answer: string): Promise<ActionSuggestion> {
+  return j(
+    await fetch(`${BASE}/actions/suggest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company_id: companyId, question, answer }),
+    }),
+  );
+}
+
+export async function executeAction(companyId: string, type: string, summary: string): Promise<Ticket> {
+  return j(
+    await fetch(`${BASE}/actions/execute`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company_id: companyId, type, summary }),
+    }),
+  );
+}
+
+export async function generatePlaybook(companyId: string, role: string, name: string): Promise<Playbook> {
+  return j(
+    await fetch(`${BASE}/onboarding/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company_id: companyId, role, name }),
+    }),
+  );
+}
+
+export async function gradeAnswer(companyId: string, question: string, answer: string): Promise<Grade> {
+  return j(
+    await fetch(`${BASE}/onboarding/grade`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company_id: companyId, question, answer }),
+    }),
+  );
+}
+
+export async function getGlossary(companyId: string): Promise<GlossaryTerm[]> {
+  return j(await fetch(`${BASE}/glossary?${qs({ company_id: companyId })}`));
+}
+
+export async function addGlossaryTerm(companyId: string, term: string, definition: string): Promise<void> {
+  await fetch(`${BASE}/glossary`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ company_id: companyId, term, definition }),
+  });
 }
 
 export async function getDocuments(companyId: string): Promise<DocSummary[]> {

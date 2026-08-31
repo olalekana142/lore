@@ -14,6 +14,7 @@ question-logger. `build_messages()` supports multi-turn follow-ups (conversation
 from __future__ import annotations
 
 import re
+from datetime import datetime, timedelta
 
 import kuzu
 
@@ -35,20 +36,25 @@ Rules:
 def retrieve(conn: kuzu.Connection, company_id: str, question: str, top_k: int | None = None) -> dict:
     """Return the top facts for a question plus numbered source documents.
 
-    Result: {query_vec, facts[], sources[], confidence, top_similarity}. Each source
-    carries the fact statements retrieved from it, so the UI can show what a citation says.
+    Result: {query_vec, facts[], sources[], confidence, top_similarity, glossary[]}. Each
+    source carries the fact statements retrieved from it, so the UI can show what a
+    citation says. Known glossary terms in the question are expanded before embedding.
     """
+    from lore.glossary import expand_query  # local import avoids a cycle
+
     top_k = top_k or settings.answer_top_k
-    query_vec = embed_text(question)
+    expanded = expand_query(conn, company_id, question)
+    query_vec = embed_text(expanded["query"])
     res = conn.execute(
         """MATCH (c:Company {id:$cid})-[:OWNS]->(d:Document)-[:STATES]->(f:Fact)
            RETURN f.id, f.statement, f.embedding,
-                  d.id, d.title, d.url, d.updated_at, d.version""",
+                  d.id, d.title, d.url, d.updated_at, d.version, d.owner, d.verified_at""",
         {"cid": company_id},
     )
+    verify_cutoff = datetime.now() - timedelta(days=settings.review_days)
     scored: list[dict] = []
     while res.has_next():
-        fid, statement, emb, did, title, url, updated_at, version = res.get_next()
+        fid, statement, emb, did, title, url, updated_at, version, owner, verified_at = res.get_next()
         if not emb:
             continue
         sim = cosine(query_vec, emb)
@@ -60,6 +66,8 @@ def retrieve(conn: kuzu.Connection, company_id: str, question: str, top_k: int |
                 "doc_id": did, "title": title, "url": url,
                 "updated_at": updated_at.isoformat() if updated_at else None,
                 "version": version,
+                "owner": owner or None,
+                "verified": bool(verified_at and verified_at >= verify_cutoff),
             }
         )
     scored.sort(key=lambda r: r["similarity"], reverse=True)
@@ -75,7 +83,8 @@ def retrieve(conn: kuzu.Connection, company_id: str, question: str, top_k: int |
                 {
                     "n": len(sources) + 1, "doc_id": f["doc_id"], "title": f["title"],
                     "url": f["url"] or None, "updated_at": f["updated_at"],
-                    "version": f["version"], "facts": [],
+                    "version": f["version"], "owner": f["owner"], "verified": f["verified"],
+                    "facts": [],
                 }
             )
         sources[doc_num[f["doc_id"]] - 1]["facts"].append(f["statement"])
@@ -91,10 +100,16 @@ def retrieve(conn: kuzu.Connection, company_id: str, question: str, top_k: int |
     return {
         "query_vec": query_vec, "facts": facts, "sources": sources,
         "confidence": confidence, "top_similarity": top_sim,
+        "glossary": expanded["hits"],
     }
 
 
-def build_messages(question: str, facts: list[dict], history: list[dict] | None = None) -> list[dict]:
+def build_messages(
+    question: str,
+    facts: list[dict],
+    history: list[dict] | None = None,
+    glossary: list[dict] | None = None,
+) -> list[dict]:
     """Assemble chat messages: system + prior turns + this question with its facts."""
     messages = [{"role": "system", "content": _SYSTEM_PROMPT}]
     for turn in history or []:
@@ -103,9 +118,15 @@ def build_messages(question: str, facts: list[dict], history: list[dict] | None 
         if role in ("user", "assistant") and content:
             messages.append({"role": role, "content": content})
 
+    gloss = ""
+    if glossary:
+        gloss = "GLOSSARY (company terms):\n" + "\n".join(
+            f"- {g['term']}: {g['definition']}" for g in glossary
+        ) + "\n\n"
+
     if facts:
         fact_lines = "\n".join(f"[{f['n']}] ({f['title']}) {f['statement']}" for f in facts)
-        user = f"FACTS:\n{fact_lines}\n\nQUESTION: {question}"
+        user = f"{gloss}FACTS:\n{fact_lines}\n\nQUESTION: {question}"
     else:
         user = (
             f"QUESTION: {question}\n\n"
@@ -133,7 +154,8 @@ def synthesize(question: str, r: dict, history: list[dict] | None = None) -> dic
             "sources": [], "confidence": "none",
         }
     text = complete(
-        _SYSTEM_PROMPT + "\n\n" + build_messages(question, r["facts"], history)[-1]["content"],
+        _SYSTEM_PROMPT + "\n\n"
+        + build_messages(question, r["facts"], history, r.get("glossary"))[-1]["content"],
         model=settings.generation_model,
         max_tokens=700,
         temperature=0.2,

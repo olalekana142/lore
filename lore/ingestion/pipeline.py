@@ -14,6 +14,7 @@ Run standalone:
 from __future__ import annotations
 
 import argparse
+import re
 from datetime import datetime
 
 import kuzu
@@ -36,7 +37,7 @@ from lore.ingestion.adapters.gdrive import DriveAdapter
 from lore.ingestion.chunk import chunk_text
 from lore.ingestion.embed import dedupe_key, embed_text
 from lore.ingestion.extract import extract
-from lore.models import Document
+from lore.models import Document, Source
 
 
 @task
@@ -69,6 +70,7 @@ def store_document(conn: kuzu.Connection, doc: Document, seen_facts: dict[str, l
     version = _next_version(conn, doc.id)
     conn.execute(
         """MERGE (d:Document {id: $id})
+           ON CREATE SET d.cited_count = 0
            SET d.title=$title, d.source=$source, d.url=$url,
                d.text=$text, d.version=$version, d.updated_at=$updated""",
         {
@@ -129,6 +131,7 @@ def _store_all(company_id: str, docs: list[Document], label: str) -> dict:
         "company_id": company_id,
         "documents_ingested": len(docs),
         "facts_extracted": total_new_facts,
+        "doc_ids": [d.id for d in docs],
     }
     print(f"[lore] {label} {summary}")
     return summary
@@ -145,6 +148,26 @@ def ingest_drive(company_id: str, folder: str) -> dict:
     """Ingest every supported document in a shared Google Drive folder."""
     docs = list(DriveAdapter().fetch(company_id, folder))
     return _store_all(company_id, docs, "ingested (drive)")
+
+
+def _slugify(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:60] or "doc"
+
+
+@flow(name="lore-ingest-text")
+def ingest_text(company_id: str, title: str, text: str) -> dict:
+    """Ingest a single pasted/drafted document (title + body)."""
+    from datetime import datetime
+
+    doc = Document(
+        id=f"manual:{_slugify(title)}",
+        company_id=company_id,
+        title=title.strip() or "Untitled",
+        source=Source.MANUAL,
+        text=text,
+        updated_at=datetime.now(),
+    )
+    return _store_all(company_id, [doc], "ingested (text)")
 
 
 def main() -> None:

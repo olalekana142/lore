@@ -154,6 +154,25 @@ export default function ConnectPage() {
             <StatTile label="Documents" value={summary.documents_ingested ?? 0} accent />
             <StatTile label="Facts extracted" value={summary.facts_extracted ?? 0} accent />
           </div>
+          {summary.conflicts && summary.conflicts.length > 0 && (
+            <div className="mt-4 rounded-lg border p-3" style={{ borderColor: "var(--red)", background: "var(--red-weak)" }}>
+              <div className="mb-2 text-sm font-semibold" style={{ color: "var(--red)" }}>
+                ⚠ {summary.conflicts.length} conflict{summary.conflicts.length === 1 ? "" : "s"} with existing docs
+              </div>
+              <div className="space-y-2">
+                {summary.conflicts.map((c, i) => (
+                  <div key={i} className="text-xs leading-relaxed">
+                    <span className="font-medium">{c.reason || "Conflicting statement"}</span>
+                    <div className="mt-0.5 text-muted">
+                      New: “{c.a.statement}” <span className="text-muted-dim">vs</span>{" "}
+                      <b>{c.b.title}</b>: “{c.b.statement}”
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="mt-5 flex gap-2">
             <button onClick={() => router.push("/ask")} className="btn-primary flex items-center gap-2 px-4 py-2.5 text-sm">
               Ask a question <IconArrow size={16} />

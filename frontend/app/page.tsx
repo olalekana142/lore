@@ -57,6 +57,14 @@ export default function Dashboard() {
             <StatTile label="Knowledge gaps" value={data.gaps_count} accent={data.gaps_count > 0} />
           </div>
 
+          {/* ROI strip */}
+          <div className="animate-fade-up mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <RoiTile label="Deflection rate" value={`${Math.round(data.roi.deflection_rate * 100)}%`} hint="questions self-served" />
+            <RoiTile label="Time saved" value={fmtMinutes(data.roi.minutes_saved)} hint="vs asking a colleague" />
+            <RoiTile label="Answered" value={`${data.roi.answered}/${data.roi.asked}`} hint="of questions asked" />
+            <RoiTile label="Never cited" value={data.never_cited_count} hint="docs unused so far" />
+          </div>
+
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             {/* Knowledge gaps */}
             <Panel
@@ -92,6 +100,21 @@ export default function Dashboard() {
               ))}
             </Panel>
 
+            {/* What people ask about */}
+            <Panel title="What people ask about" icon={<IconChat size={16} />} empty={data.questions_by_topic.length === 0} emptyText="No questions asked yet.">
+              {data.questions_by_topic.map((t, i) => (
+                <div key={i} className="py-1.5">
+                  <div className="mb-1 flex items-center justify-between text-sm">
+                    <span>{t.topic}</span>
+                    <span className="text-xs font-semibold text-accent">{t.pct}%</span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
+                    <div className="h-full rounded-full bg-accent" style={{ width: `${t.pct}%` }} />
+                  </div>
+                </div>
+              ))}
+            </Panel>
+
             {/* Topic coverage */}
             <Panel title="Topic coverage" icon={<IconUpload size={16} />} empty={data.top_topics.length === 0} emptyText="No topics yet.">
               {(() => {
@@ -110,12 +133,27 @@ export default function Dashboard() {
               })()}
             </Panel>
 
+            {/* Most-used docs */}
+            <Panel
+              title="Most-used documents"
+              icon={<IconArrow size={16} />}
+              empty={data.most_cited.length === 0}
+              emptyText="No answers cite a doc yet — ask some questions."
+            >
+              {data.most_cited.map((d, i) => (
+                <Link key={i} href={`/library/${d.doc_id}`} className="flex items-center justify-between gap-3 py-2.5 hover:text-accent">
+                  <span className="text-sm">{d.title}</span>
+                  <span className="chip shrink-0">cited {d.cited_count}×</span>
+                </Link>
+              ))}
+            </Panel>
+
             {/* Stale docs */}
             <Panel
               title="Needs review"
               icon={<IconClock size={16} />}
-              href="/library"
-              cta="Library"
+              href="/health"
+              cta="Health"
               empty={data.stale_docs.length === 0}
               emptyText="Everything's fresh. 🎉"
             >
@@ -140,6 +178,24 @@ export default function Dashboard() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function fmtMinutes(m: number): string {
+  if (m >= 60) {
+    const h = m / 60;
+    return `${h % 1 === 0 ? h : h.toFixed(1)} hr`;
+  }
+  return `${m} min`;
+}
+
+function RoiTile({ label, value, hint }: { label: string; value: React.ReactNode; hint: string }) {
+  return (
+    <div className="card p-4">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-dim">{label}</div>
+      <div className="mt-1 text-xl font-bold text-accent">{value}</div>
+      <div className="mt-0.5 text-[11px] text-muted-dim">{hint}</div>
     </div>
   );
 }

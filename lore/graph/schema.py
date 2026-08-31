@@ -25,17 +25,23 @@ NODE_TABLES = [
     )""",
     """CREATE NODE TABLE IF NOT EXISTS Document(
         id STRING, title STRING, source STRING, url STRING,
-        text STRING, version INT64, updated_at TIMESTAMP, PRIMARY KEY(id)
+        text STRING, version INT64, updated_at TIMESTAMP,
+        owner STRING, verified_at TIMESTAMP,
+        cited_count INT64, last_cited TIMESTAMP, PRIMARY KEY(id)
     )""",
     """CREATE NODE TABLE IF NOT EXISTS Fact(
         id STRING, statement STRING, embedding DOUBLE[], PRIMARY KEY(id)
     )""",
     """CREATE NODE TABLE IF NOT EXISTS Topic(
-        id STRING, name STRING, embedding DOUBLE[], PRIMARY KEY(id)
+        id STRING, name STRING, owner STRING, embedding DOUBLE[], PRIMARY KEY(id)
+    )""",
+    """CREATE NODE TABLE IF NOT EXISTS GlossaryTerm(
+        id STRING, term STRING, definition STRING, PRIMARY KEY(id)
     )""",
     """CREATE NODE TABLE IF NOT EXISTS EmployeeQuestion(
         id STRING, text STRING, asked_count INT64, unanswered_count INT64,
-        coverage DOUBLE, last_asked TIMESTAMP, embedding DOUBLE[], PRIMARY KEY(id)
+        coverage DOUBLE, topic STRING, last_asked TIMESTAMP,
+        embedding DOUBLE[], PRIMARY KEY(id)
     )""",
 ]
 
@@ -45,6 +51,7 @@ REL_TABLES = [
     "CREATE REL TABLE IF NOT EXISTS STATES(FROM Document TO Fact)",
     "CREATE REL TABLE IF NOT EXISTS ABOUT(FROM Document TO Topic)",
     "CREATE REL TABLE IF NOT EXISTS ASKED(FROM Company TO EmployeeQuestion)",
+    "CREATE REL TABLE IF NOT EXISTS DEFINES(FROM Company TO GlossaryTerm)",
     "CREATE REL TABLE IF NOT EXISTS CONNECTED_TO(FROM Topic TO Topic, weight DOUBLE)",
 ]
 

@@ -10,6 +10,8 @@ import {
   IconLibrary,
   IconGap,
   IconUpload,
+  IconHealth,
+  IconRocket,
   IconSun,
   IconMoon,
 } from "./icons";
@@ -19,6 +21,8 @@ const NAV = [
   { href: "/ask", label: "Ask Lore", Icon: IconChat },
   { href: "/library", label: "Documents", Icon: IconLibrary },
   { href: "/gaps", label: "Knowledge gaps", Icon: IconGap },
+  { href: "/health", label: "Content health", Icon: IconHealth },
+  { href: "/onboarding", label: "Onboarding", Icon: IconRocket },
   { href: "/connect", label: "Add documents", Icon: IconUpload },
 ];
 

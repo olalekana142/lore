@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { askStream, sendFeedback, type Confidence, type Source, type Turn } from "@/lib/api";
+import {
+  askStream, sendFeedback, escalate, suggestAction, executeAction,
+  type Confidence, type Source, type Turn, type ActionSuggestion, type Ticket,
+} from "@/lib/api";
 import { useCompany } from "@/lib/useCompany";
 import AnswerText from "../components/AnswerText";
 import { ConfidenceBadge, SourceCard } from "../components/ui";
-import { IconSend, IconThumbUp, IconThumbDown, IconChat } from "../components/icons";
+import { IconSend, IconThumbUp, IconThumbDown, IconChat, IconGap, IconZap } from "../components/icons";
 
 interface Msg {
   role: "user" | "assistant";
@@ -123,7 +126,7 @@ export default function AskPage() {
                 </div>
               </div>
             ) : (
-              <AssistantBubble key={i} msg={m} companyId={companyId} />
+              <AssistantBubble key={i} msg={m} companyId={companyId} question={messages[i - 1]?.content ?? ""} />
             ),
           )}
           <div ref={endRef} />
@@ -158,13 +161,38 @@ export default function AskPage() {
   );
 }
 
-function AssistantBubble({ msg, companyId }: { msg: Msg; companyId: string }) {
+function AssistantBubble({ msg, companyId, question }: { msg: Msg; companyId: string; question: string }) {
   const [cite, setCite] = useState<number | null>(null);
   const [rated, setRated] = useState<"up" | "down" | null>(null);
+  const [escalated, setEscalated] = useState(false);
+  const [action, setAction] = useState<ActionSuggestion | null>(null);
+  const [ticket, setTicket] = useState<Ticket | null>(null);
+  const [filing, setFiling] = useState(false);
+  const askedRef = useRef(false);
+
+  // Once the answer is complete, ask whether it can be turned into an action.
+  useEffect(() => {
+    if (msg.streaming || !msg.content || msg.confidence === "none" || askedRef.current) return;
+    askedRef.current = true;
+    suggestAction(companyId, question, msg.content).then(setAction).catch(() => {});
+  }, [msg.streaming, msg.content, msg.confidence, companyId, question]);
+
+  const fileIt = () => {
+    if (!action?.type) return;
+    setFiling(true);
+    executeAction(companyId, action.type, action.summary ?? question)
+      .then(setTicket)
+      .finally(() => setFiling(false));
+  };
 
   const rate = (r: "up" | "down") => {
     setRated(r);
-    sendFeedback(companyId, "", msg.content, r).catch(() => {});
+    sendFeedback(companyId, question, msg.content, r).catch(() => {});
+  };
+
+  const doEscalate = () => {
+    setEscalated(true);
+    escalate(companyId, question).catch(() => {});
   };
 
   return (
@@ -203,6 +231,42 @@ function AssistantBubble({ msg, companyId }: { msg: Msg; companyId: string }) {
               <IconThumbDown size={15} />
             </button>
             {rated && <span className="ml-1 text-xs text-muted-dim">Thanks for the feedback</span>}
+          </div>
+        )}
+
+        {action?.actionable && (
+          <div className="mt-3 rounded-lg border p-3" style={{ borderColor: "var(--accent)", background: "var(--accent-weak)" }}>
+            {ticket ? (
+              <div className="text-sm">
+                <span style={{ color: "var(--green)" }} className="font-medium">✓ Filed {ticket.ticket_id}</span>{" "}
+                to {ticket.destination} ({ticket.channel}) · ETA {ticket.eta}.
+                <span className="ml-1 text-xs text-muted-dim">(simulated — connect Jira/Slack to go live)</span>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm">{action.summary}</span>
+                <button onClick={fileIt} disabled={filing} className="btn-primary flex shrink-0 items-center gap-1.5 px-3 py-1.5 text-xs">
+                  {filing ? <span className="spinner" /> : <IconZap size={14} />} {action.label}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {!msg.streaming && msg.confidence === "none" && (
+          <div className="mt-3 rounded-lg border border-border bg-surface-2 p-3">
+            {escalated ? (
+              <p className="text-sm" style={{ color: "var(--green)" }}>
+                ✓ Sent to HR. When they answer, it&apos;s saved so the next person gets it automatically.
+              </p>
+            ) : (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm text-muted">Not documented? Ask a human.</span>
+                <button onClick={doEscalate} className="btn-primary flex items-center gap-1.5 px-3 py-1.5 text-xs">
+                  <IconGap size={14} /> Escalate to HR
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

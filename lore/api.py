@@ -27,11 +27,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from lore import analytics, feedback
+from lore import actions, analytics, escalations, feedback, glossary, health, onboarding
 from lore.config import settings
 from lore.graph import queries
 from lore.graph.schema import get_connection, init_schema
-from lore.ingestion.pipeline import ingest, ingest_drive
+from lore.ingestion.pipeline import ingest, ingest_drive, ingest_text
 from lore.llm import stream_chat
 from lore.retrieval.answer import build_messages, cited_sources, retrieve, synthesize
 from lore.retrieval.deep_search import deep_search_facts
@@ -73,9 +73,77 @@ class DriveRequest(BaseModel):
     folder: str
 
 
+class TextRequest(BaseModel):
+    company_id: str
+    title: str
+    text: str
+
+
+class QuestionRequest(BaseModel):
+    company_id: str
+    question: str
+
+
+class GlossaryRequest(BaseModel):
+    company_id: str
+    term: str
+    definition: str
+
+
+class VerifyRequest(BaseModel):
+    company_id: str
+    doc_id: str
+    owner: str
+
+
+class EscalateRequest(BaseModel):
+    company_id: str
+    question: str
+    asked_by: str = ""
+
+
+class ResolveRequest(BaseModel):
+    company_id: str
+    escalation_id: str
+    answer: str
+
+
+class PlaybookRequest(BaseModel):
+    company_id: str
+    role: str
+    name: str = ""
+
+
+class GradeRequest(BaseModel):
+    company_id: str
+    question: str
+    answer: str
+
+
+class SuggestActionRequest(BaseModel):
+    company_id: str
+    question: str
+    answer: str
+
+
+class ExecuteActionRequest(BaseModel):
+    company_id: str
+    type: str
+    summary: str
+    requested_by: str = ""
+
+
+def _with_conflicts(summary: dict) -> dict:
+    """Attach any upload-time conflicts between the new doc(s) and existing policies."""
+    summary["conflicts"] = health.conflicts_for_docs(
+        _conn, summary["company_id"], summary.get("doc_ids", [])
+    )
+    return summary
+
+
 # ------------------------------------------------------------------------ routes
 @app.get("/health")
-def health() -> dict:
+def healthcheck() -> dict:
     return {"status": "ok"}
 
 
@@ -89,7 +157,7 @@ async def ingest_upload(company_id: str = Form(...), file: UploadFile = File(...
     with dest.open("wb") as out:
         shutil.copyfileobj(file.file, out)
     try:
-        return ingest(company_id, str(dest))
+        return _with_conflicts(ingest(company_id, str(dest)))
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -98,7 +166,7 @@ async def ingest_upload(company_id: str = Form(...), file: UploadFile = File(...
 def ingest_drive_folder(req: DriveRequest) -> dict:
     """Ingest a shared Google Drive folder (needs the drive extra + service-account creds)."""
     try:
-        return ingest_drive(req.company_id, req.folder)
+        return _with_conflicts(ingest_drive(req.company_id, req.folder))
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -109,10 +177,12 @@ def ask(req: AskRequest) -> dict:
     history = [t.model_dump() for t in req.history]
     r = retrieve(_conn, req.company_id, req.question)
     result = synthesize(req.question, r, history)
+    topic = analytics.primary_topic(_conn, result["sources"][0]["doc_id"]) if result["sources"] else "General"
     analytics.log_question(
         _conn, req.company_id, req.question, r["query_vec"],
-        coverage=r["top_similarity"], answered=bool(result["sources"]),
+        coverage=r["top_similarity"], answered=bool(result["sources"]), topic=topic,
     )
+    analytics.record_citations(_conn, [s["doc_id"] for s in result["sources"]])
     return result
 
 
@@ -130,8 +200,8 @@ def ask_stream(req: AskRequest) -> StreamingResponse:
 
     def gen():
         yield json.dumps({"type": "sources", "sources": r["sources"],
-                          "confidence": r["confidence"]}) + "\n"
-        messages = build_messages(question, r["facts"], history)
+                          "confidence": r["confidence"], "glossary": r.get("glossary", [])}) + "\n"
+        messages = build_messages(question, r["facts"], history, r.get("glossary"))
         pieces: list[str] = []
         for delta in stream_chat(messages, model=settings.generation_model,
                                  max_tokens=700, temperature=0.2):
@@ -140,10 +210,12 @@ def ask_stream(req: AskRequest) -> StreamingResponse:
         full = "".join(pieces)
         cited = cited_sources(full, r["sources"])
         # Log after synthesis: "answered" = the reply actually cited a source.
+        topic = analytics.primary_topic(_conn, cited[0]["doc_id"]) if cited else "General"
         analytics.log_question(
             _conn, company_id, question, r["query_vec"],
-            coverage=r["top_similarity"], answered=bool(cited),
+            coverage=r["top_similarity"], answered=bool(cited), topic=topic,
         )
+        analytics.record_citations(_conn, [s["doc_id"] for s in cited])
         yield json.dumps({"type": "done", "sources": cited}) + "\n"
 
     return StreamingResponse(gen(), media_type="application/x-ndjson")
@@ -165,6 +237,92 @@ def overview(company_id: str) -> dict:
 @app.get("/gaps")
 def gaps(company_id: str) -> list[dict]:
     return analytics.knowledge_gaps(_conn, company_id)
+
+
+@app.post("/gaps/draft")
+def gap_draft(req: QuestionRequest) -> dict:
+    """LLM-draft a document answering an unanswered question (for review + save)."""
+    return analytics.draft_answer(req.company_id, req.question)
+
+
+@app.post("/ingest-text")
+def ingest_text_doc(req: TextRequest) -> dict:
+    """Ingest a pasted or drafted document (title + body)."""
+    try:
+        return _with_conflicts(ingest_text(req.company_id, req.title, req.text))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/content-health")
+def content_health(company_id: str) -> dict:
+    """Conflicts + duplicates across docs, plus never-cited and stale docs."""
+    result = health.content_health(_conn, company_id)
+    result["never_cited"] = analytics.never_cited_docs(_conn, company_id)
+    result["stale"] = queries.find_stale_docs(_conn, company_id)
+    return result
+
+
+@app.post("/documents/verify")
+def verify_document(req: VerifyRequest) -> dict:
+    """Mark a document reviewed/verified now, with an owner (Trust: ownership)."""
+    analytics.verify_document(_conn, req.doc_id, req.owner)
+    return {"ok": True}
+
+
+@app.post("/escalate")
+def escalate(req: EscalateRequest) -> dict:
+    """Forward an unanswered question to the human inbox."""
+    return escalations.create(req.company_id, req.question, req.asked_by)
+
+
+@app.get("/escalations")
+def get_escalations(company_id: str) -> list[dict]:
+    return escalations.list_open(company_id)
+
+
+@app.post("/escalations/resolve")
+def resolve_escalation(req: ResolveRequest) -> dict:
+    """HR answers -> saved into the knowledge base + escalation closed."""
+    try:
+        return escalations.resolve(req.company_id, req.escalation_id, req.answer)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/actions/suggest")
+def actions_suggest(req: SuggestActionRequest) -> dict:
+    """After an answer, decide if it can be turned into an executable request."""
+    return actions.suggest_action(req.company_id, req.question, req.answer)
+
+
+@app.post("/actions/execute")
+def actions_execute(req: ExecuteActionRequest) -> dict:
+    """Execute the request (currently simulated — logs + returns a ticket confirmation)."""
+    return actions.execute_action(req.company_id, req.type, req.summary, req.requested_by)
+
+
+@app.post("/onboarding/generate")
+def onboarding_generate(req: PlaybookRequest) -> dict:
+    """Build a role-specific onboarding playbook (checklist + quiz) from the KB."""
+    return onboarding.generate_playbook(_conn, req.company_id, req.role, req.name)
+
+
+@app.post("/onboarding/grade")
+def onboarding_grade(req: GradeRequest) -> dict:
+    """Grade a new hire's answer to a quiz question against the knowledge base."""
+    return onboarding.grade_answer(_conn, req.company_id, req.question, req.answer)
+
+
+@app.get("/glossary")
+def get_glossary(company_id: str) -> list[dict]:
+    return glossary.list_terms(_conn, company_id)
+
+
+@app.post("/glossary")
+def add_glossary(req: GlossaryRequest) -> dict:
+    glossary.add_term(_conn, req.company_id, req.term, req.definition)
+    return {"ok": True}
 
 
 @app.get("/questions")

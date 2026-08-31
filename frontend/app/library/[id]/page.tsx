@@ -1,13 +1,77 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { getDocument, type DocDetail } from "@/lib/api";
+import { getDocument, verifyDocument, type DocDetail } from "@/lib/api";
 import { useCompany } from "@/lib/useCompany";
 import { relativeDate } from "@/lib/format";
 import { ErrorNote } from "../../components/ui";
 import { IconArrow, IconExternal, IconDoc } from "../../components/icons";
+
+/** Find the sentence in `text` that best matches `q` (token overlap); split around it. */
+function splitForHighlight(text: string, q: string | null): [string, string, string] | null {
+  if (!q) return null;
+  const qWords = new Set((q.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((w) => w.length > 2));
+  if (qWords.size === 0) return null;
+  const sentences = text.match(/[^.!?\n]+[.!?]?/g) ?? [];
+  let best: string | null = null;
+  let bestScore = 0;
+  for (const s of sentences) {
+    const sw = (s.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((w) => w.length > 2);
+    if (sw.length === 0) continue;
+    const overlap = sw.filter((w) => qWords.has(w)).length / sw.length;
+    if (overlap > bestScore) {
+      bestScore = overlap;
+      best = s;
+    }
+  }
+  if (!best || bestScore < 0.34) return null;
+  const idx = text.indexOf(best);
+  if (idx < 0) return null;
+  return [text.slice(0, idx), best.trim(), text.slice(idx + best.length)];
+}
+
+function VerifyBar({ doc, companyId, onDone }: { doc: DocDetail; companyId: string; onDone: () => void }) {
+  const [owner, setOwner] = useState(doc.owner ?? "");
+  const [busy, setBusy] = useState(false);
+
+  async function verify() {
+    if (!owner.trim()) return;
+    setBusy(true);
+    try {
+      await verifyDocument(companyId, doc.doc_id, owner.trim());
+      onDone();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mb-1 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface-2 p-3">
+      {doc.verified ? (
+        <span className="inline-flex items-center gap-1.5 text-sm font-medium" style={{ color: "var(--green)" }}>
+          ✓ Verified{doc.owner ? ` by ${doc.owner}` : ""} · {relativeDate(doc.verified_at)}
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-1.5 text-sm font-medium" style={{ color: "var(--amber)" }}>
+          ⚠ Unverified — employees see this warning on answers from this doc
+        </span>
+      )}
+      <div className="ml-auto flex items-center gap-2">
+        <input
+          value={owner}
+          onChange={(e) => setOwner(e.target.value)}
+          placeholder="Owner (e.g. HR Team)"
+          className="input w-40 px-3 py-1.5 text-sm"
+        />
+        <button onClick={verify} disabled={busy || !owner.trim()} className="btn-primary px-3 py-1.5 text-sm">
+          {doc.verified ? "Re-verify" : "Mark verified"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function DocumentPage() {
   const params = useParams();
@@ -15,6 +79,22 @@ export default function DocumentPage() {
   const [companyId, , ready] = useCompany();
   const [doc, setDoc] = useState<DocDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [highlight, setHighlight] = useState<string | null>(null);
+  const markRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    try {
+      setHighlight(new URLSearchParams(window.location.search).get("q"));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (doc && highlight && markRef.current) {
+      markRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [doc, highlight]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -65,7 +145,9 @@ export default function DocumentPage() {
             </div>
           </header>
 
-          <section className="mb-5">
+          <VerifyBar doc={doc} companyId={companyId} onDone={load} />
+
+          <section className="mb-5 mt-5">
             <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold">
               <span className="text-accent"><IconDoc size={16} /></span>
               Extracted facts <span className="chip">{doc.facts.length}</span>
@@ -87,7 +169,29 @@ export default function DocumentPage() {
 
           <section>
             <h2 className="mb-2 text-sm font-semibold">Full text</h2>
-            <div className="card whitespace-pre-wrap p-5 text-sm leading-relaxed text-muted">{doc.text}</div>
+            {highlight && (
+              <div className="mb-2 text-xs text-muted-dim">
+                Showing where the cited fact came from — highlighted below.
+              </div>
+            )}
+            <div className="card whitespace-pre-wrap p-5 text-sm leading-relaxed text-muted">
+              {(() => {
+                const parts = splitForHighlight(doc.text, highlight);
+                if (!parts) return doc.text;
+                return (
+                  <>
+                    {parts[0]}
+                    <mark
+                      ref={markRef}
+                      style={{ background: "var(--accent-weak)", color: "var(--foreground)", borderRadius: 4, padding: "1px 3px", boxShadow: "0 0 0 2px var(--accent-weak)" }}
+                    >
+                      {parts[1]}
+                    </mark>
+                    {parts[2]}
+                  </>
+                );
+              })()}
+            </div>
           </section>
         </div>
       )}

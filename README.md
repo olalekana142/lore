@@ -110,10 +110,25 @@ Topic    --CONNECTED_TO-> Topic
 
 | Tool | Signature | Description |
 |---|---|---|
-| `ingest_documents` | `(company_id, source)` | ingest a `.csv/.json/.txt/.md` file; re-ingest to update |
+| `ingest_documents` | `(company_id, source)` | ingest a `.csv/.json/.txt/.md/.pdf/.docx` file; re-ingest to update |
+| `ingest_google_drive` | `(company_id, folder)` | ingest a shared Drive folder (service-account auth) |
 | `ask_company` | `(company_id, question)` | **flagship**: cited answer from the company's docs |
 | `search_knowledge` | `(company_id, query, top_k)` | semantic search over facts |
 | `stale_documents` | `(company_id, stale_after_days)` | docs overdue for review |
+| `find_conflicts` | `(company_id)` | **graph-native**: facts that conflict or duplicate across docs |
+
+### Intelligence features (the graph moat)
+
+- **Conversational Ask** — streaming answers, follow-up memory, clickable `[n]` citations, thumbs feedback.
+- **Conflict & duplicate detection** — reasons *across* documents to flag contradictory facts (e.g. "20 PTO days" in one doc vs "25" in another) and redundant content. Flat vector RAG can't do this.
+- **Knowledge gaps → auto-draft** — logs questions the docs can't answer, then the LLM drafts the missing doc for review; publish it and the gap closes.
+- **ROI analytics** — deflection rate, estimated time saved, most-cited and never-cited ("dead weight") documents.
+- **Glossary** — company acronyms/jargon expanded into every query before retrieval.
+- **Trust engine** — conflict alerts *at upload time*, document ownership + verification with an "Unverified" badge on answers, and "% of questions by topic" for leadership.
+- **Escalate → learn** — when Lore can't answer, forward to an HR inbox; their reply is ingested so the next person gets it automatically.
+- **Onboarding playbooks** — a role generates a KB-grounded 14-day checklist plus quizzes graded against your real policies.
+- **Actionable workflows** — answers become actions ("file the IT request?") that dispatch a ticket (simulated; drop-in real Jira/Zendesk/Slack).
+- **Provenance** — click a cited fact to open the source document with the exact sentence highlighted.
 
 The HTTP API mirrors these: `POST /ingest`, `POST /ask`, `GET /search`, `GET /stale`,
 `GET /topics`.
@@ -235,9 +250,10 @@ python -m lore.ingestion.pipeline --company acme --source sample_data/acme_pto_u
 - [x] **Phase 1 — Core**: Company/Document/Fact/Topic graph, document ingestion, cited answers
 - [x] **Phase 2 — Freshness**: version-on-reingest, stale-doc review
 - [x] **Phase 3 — Web app**: Next.js Ask / Add-documents / Review pages over FastAPI
-- [~] **Phase 4 — More sources**: PDF/DOCX parsing ✅ · Google Drive connector · database connector
-- [ ] **Phase 5 — Knowledge gaps**: log worker questions, surface what's asked but undocumented
-- [ ] **Phase 6 — Ops**: SSO/auth, per-team permissions, Slack bot, scheduled re-sync
+- [x] **Phase 4 — More sources**: PDF/DOCX parsing ✅ · Google Drive connector ✅ · database connector
+- [x] **Phase 5 — Intelligence**: knowledge gaps + auto-draft ✅ · conflict/duplicate detection ✅ · ROI analytics ✅ · glossary ✅
+- [x] **Phase 6 — Trust & workflow**: conflict-at-upload ✅ · ownership/verification ✅ · escalate→learn ✅ · onboarding playbooks ✅ · actionable workflows ✅ · provenance highlighting ✅
+- [ ] **Phase 7 — Ops**: SSO/auth, per-team permissions, Slack bot, expert/people graph, real Jira/Slack action connectors, scheduled re-sync
 
 ---
 

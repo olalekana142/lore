@@ -64,6 +64,14 @@ def stale_documents(company_id: str, stale_after_days: int = 180) -> list[dict]:
     return queries.find_stale_docs(_conn, company_id, stale_after_days)
 
 
+@mcp.tool()
+def find_conflicts(company_id: str) -> dict:
+    """Find facts that conflict or duplicate across the company's documents."""
+    from lore import health
+
+    return health.content_health(_conn, company_id)
+
+
 def main() -> None:
     mcp.run()
 

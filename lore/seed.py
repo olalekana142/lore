@@ -22,6 +22,14 @@ _SAMPLES = [
     "acme_pto_update.csv",
     "acme_parental_leave.pdf",
     "acme_byod.docx",
+    "acme_faq.csv",  # legacy FAQ — intentionally conflicts (20 vs 25 PTO days) for the demo
+]
+_GLOSSARY = [
+    ("PTO", "Paid Time Off"),
+    ("MFA", "Multi-Factor Authentication"),
+    ("MDM", "Mobile Device Management"),
+    ("BYOD", "Bring Your Own Device"),
+    ("SOP", "Standard Operating Procedure"),
 ]
 
 
@@ -49,6 +57,17 @@ def main() -> None:
         if path.exists():
             print(f"[seed] ingesting {path} ...")
             ingest(COMPANY, str(path))
+
+    from lore import glossary, analytics
+    for term, definition in _GLOSSARY:
+        glossary.add_term(conn, COMPANY, term, definition)
+    print(f"[seed] glossary: {len(_GLOSSARY)} terms")
+
+    # Verify a couple of docs (with owners) so the app shows a mix of verified/unverified.
+    for doc_id, owner in [("upload:pto-policy", "HR Team"),
+                          ("upload:security-incident", "IT Security")]:
+        analytics.verify_document(conn, doc_id, owner)
+    print("[seed] verified 2 docs")
     print("[seed] done.")
 
 

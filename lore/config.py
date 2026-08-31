@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     answer_top_k: int = 6          # how many facts to ground an answer on
     min_relevance: float = 0.25    # facts below this cosine sim are ignored as noise
 
+    # --- Trust / freshness ---
+    review_days: int = 180         # a doc verified longer ago than this reads as "Unverified"
+
     # --- Storage ---
     db_path: Path = Path("./data/lore.kuzu")
 

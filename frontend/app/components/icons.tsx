@@ -95,6 +95,52 @@ export const IconSearch = (p: { size?: number }) => (
     <path d="m21 21-4.3-4.3" />
   </Svg>
 );
+export const IconRocket = (p: { size?: number }) => (
+  <Svg {...p}>
+    <path d="M4.5 16.5c-1.5 1.3-2 5-2 5s3.7-.5 5-2c.7-.8.7-2 0-2.8a2 2 0 0 0-3 0Z" />
+    <path d="M12 15 9 12a15 15 0 0 1 3-8 8 8 0 0 1 7-3 8 8 0 0 1-3 7 15 15 0 0 1-4 3Z" />
+    <path d="M9 12H4s.5-2.8 2-4a3 3 0 0 1 3 0M12 15v5s2.8-.5 4-2a3 3 0 0 0 0-3" />
+  </Svg>
+);
+export const IconZap = (p: { size?: number }) => (
+  <Svg {...p}>
+    <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z" />
+  </Svg>
+);
+export const IconCheck = (p: { size?: number }) => (
+  <Svg {...p}>
+    <path d="M20 6 9 17l-5-5" />
+  </Svg>
+);
+export const IconHealth = (p: { size?: number }) => (
+  <Svg {...p}>
+    <path d="M20.8 5.6a5.5 5.5 0 0 0-7.8 0L12 6.6l-1-1a5.5 5.5 0 0 0-7.8 7.8L12 22l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z" />
+    <path d="M3.5 12h4l1.5-3 3 6 1.5-3h4" />
+  </Svg>
+);
+export const IconAlert = (p: { size?: number }) => (
+  <Svg {...p}>
+    <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+    <path d="M12 9v4M12 17h.01" />
+  </Svg>
+);
+export const IconCopy = (p: { size?: number }) => (
+  <Svg {...p}>
+    <rect x="9" y="9" width="12" height="12" rx="2" />
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+  </Svg>
+);
+export const IconSparkle = (p: { size?: number }) => (
+  <Svg {...p}>
+    <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.1 2.1M15.6 15.6l2.1 2.1M17.7 6.3l-2.1 2.1M8.4 15.6l-2.1 2.1" />
+  </Svg>
+);
+export const IconBook = (p: { size?: number }) => (
+  <Svg {...p}>
+    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14Z" />
+    <path d="M8 7h8M8 11h6" />
+  </Svg>
+);
 export const IconExternal = (p: { size?: number }) => (
   <Svg {...p}>
     <path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />

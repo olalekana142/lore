@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getDocument, verifyDocument, setAudience, type DocDetail } from "@/lib/api";
 import { useCompany } from "@/lib/useCompany";
+import { useAuth, atLeast } from "@/lib/useAuth";
 import { relativeDate } from "@/lib/format";
 import { ErrorNote } from "../../components/ui";
 import { IconArrow, IconExternal, IconDoc } from "../../components/icons";
@@ -114,6 +115,8 @@ export default function DocumentPage() {
   const params = useParams();
   const docId = decodeURIComponent(Array.isArray(params.id) ? params.id[0] : params.id ?? "");
   const [companyId, , ready] = useCompany();
+  const { user } = useAuth();
+  const canEdit = atLeast(user?.role, "editor");
   const [doc, setDoc] = useState<DocDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
@@ -182,8 +185,22 @@ export default function DocumentPage() {
             </div>
           </header>
 
-          <VerifyBar doc={doc} companyId={companyId} onDone={load} />
-          <AudienceBar doc={doc} companyId={companyId} onDone={load} />
+          {canEdit ? (
+            <>
+              <VerifyBar doc={doc} companyId={companyId} onDone={load} />
+              <AudienceBar doc={doc} companyId={companyId} onDone={load} />
+            </>
+          ) : (
+            <div className="mb-1 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface-2 p-3 text-sm">
+              {doc.verified ? (
+                <span style={{ color: "var(--green)" }}>✓ Verified{doc.owner ? ` by ${doc.owner}` : ""}</span>
+              ) : (
+                <span style={{ color: "var(--amber)" }}>⚠ Unverified</span>
+              )}
+              <span className="text-muted-dim">·</span>
+              <span>{!doc.audience || doc.audience.includes("everyone") ? "🌐 Everyone" : `🔒 ${doc.audience.join(", ")}`}</span>
+            </div>
+          )}
 
           <section className="mb-5 mt-5">
             <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold">

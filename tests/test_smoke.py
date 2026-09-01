@@ -112,16 +112,16 @@ def test_password_hashing_roundtrip():
 def test_session_token_roundtrip_and_tamper():
     from lore.auth import mint_token, parse_token
 
-    tok = mint_token("acme", "hr_admin", ["hr"])
+    tok = mint_token("acme", "hr_admin", ["hr"], "editor")
     parsed = parse_token("Bearer " + tok)
-    assert parsed == {"company_id": "acme", "username": "hr_admin", "groups": ["hr"]}
+    assert parsed == {"company_id": "acme", "username": "hr_admin", "groups": ["hr"], "role": "editor"}
     assert parse_token(tok[:-2] + "zz") is None  # tampered signature rejected
     assert parse_token("garbage") is None
     assert parse_token(None) is None
 
 
 def test_permission_can_see():
-    from lore.auth import can_see
+    from lore.auth import ALL, can_see
 
     assert can_see(["everyone"], [])           # public doc, anonymous
     assert can_see(None, [])                    # default audience is public
@@ -129,6 +129,17 @@ def test_permission_can_see():
     assert can_see(["everyone", "hr"], ["eng"])  # public wins
     assert not can_see(["hr"], ["eng"])         # wrong group -> hidden
     assert not can_see(["hr"], [])              # anonymous -> hidden
+    assert can_see(["hr"], [ALL])               # admin all-access sees everything
+
+
+def test_role_hierarchy():
+    from lore.auth import role_at_least
+
+    assert role_at_least("admin", "editor")
+    assert role_at_least("editor", "editor")
+    assert not role_at_least("member", "editor")
+    assert not role_at_least("anonymous", "member")
+    assert role_at_least("admin", "member")
 
 
 def test_embed_is_deterministic_and_normalized():

@@ -112,6 +112,13 @@ export const IconCheck = (p: { size?: number }) => (
     <path d="M20 6 9 17l-5-5" />
   </Svg>
 );
+export const IconUsers = (p: { size?: number }) => (
+  <Svg {...p}>
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13A4 4 0 0 1 16 11" />
+  </Svg>
+);
 export const IconHealth = (p: { size?: number }) => (
   <Svg {...p}>
     <path d="M20.8 5.6a5.5 5.5 0 0 0-7.8 0L12 6.6l-1-1a5.5 5.5 0 0 0-7.8 7.8L12 22l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z" />

@@ -31,7 +31,7 @@ NODE_TABLES = [
     )""",
     """CREATE NODE TABLE IF NOT EXISTS User(
         id STRING, company_id STRING, username STRING, name STRING,
-        salt STRING, pw_hash STRING, groups STRING[], PRIMARY KEY(id)
+        salt STRING, pw_hash STRING, role STRING, groups STRING[], PRIMARY KEY(id)
     )""",
     """CREATE NODE TABLE IF NOT EXISTS Fact(
         id STRING, statement STRING, embedding DOUBLE[], PRIMARY KEY(id)

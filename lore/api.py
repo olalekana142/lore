@@ -166,16 +166,27 @@ class AudienceRequest(BaseModel):
     audience: list[str]
 
 
-def _identity(company_fallback: str, authorization: str | None) -> tuple[str, list[str] | None]:
-    """Resolve (company_id, groups) from a bearer token; anonymous -> public docs only.
+def _identity(company_fallback: str, authorization: str | None) -> tuple[str, list[str], str]:
+    """Resolve (company_id, groups, role) from a bearer token.
 
-    A valid token pins BOTH the company and the caller's groups (client can't spoof
-    either). Anonymous callers get groups=['everyone'] — they see only public documents.
+    A valid token pins the company, groups AND role (client can't spoof any). Admins get
+    an all-access pseudo-group. Anonymous callers see only public documents.
     """
     tok = auth.parse_token(authorization)
     if tok:
-        return tok["company_id"], tok["groups"]
-    return company_fallback, [auth.PUBLIC]
+        groups = list(tok["groups"])
+        if tok.get("role") == "admin":
+            groups.append(auth.ALL)
+        return tok["company_id"], groups, tok.get("role", "member")
+    return company_fallback, [auth.PUBLIC], "anonymous"
+
+
+def _require(authorization: str | None, minimum: str) -> tuple[str, list[str], str]:
+    """Resolve identity and enforce a minimum role, else 403."""
+    cid, groups, role = _identity("", authorization)
+    if not auth.role_at_least(role, minimum):
+        raise HTTPException(status_code=403, detail=f"This action requires the '{minimum}' role.")
+    return cid, groups, role
 
 
 def _with_conflicts(summary: dict) -> dict:
@@ -195,9 +206,13 @@ def healthcheck() -> dict:
 # ---------------------------------------------------------------------- auth
 @app.post("/auth/register")
 def auth_register(req: RegisterRequest) -> dict:
-    """Create a user (demo-open; in production this is an admin action)."""
-    auth.create_user(_db(), req.company_id, req.username, req.password, req.name, req.groups)
-    return {"ok": True}
+    """Self-service sign-up. New accounts are always 'member' (roles are granted by admins)."""
+    if auth.user_exists(_db(), req.company_id, req.username):
+        raise HTTPException(status_code=409, detail="That username is already taken.")
+    user = auth.create_user(_db(), req.company_id, req.username, req.password, req.name,
+                            groups=[], role="member")
+    token = auth.mint_token(req.company_id, user["username"], user["groups"], user["role"])
+    return {"token": token, "company_id": req.company_id, "user": user}
 
 
 @app.post("/auth/login")
@@ -205,7 +220,7 @@ def auth_login(req: LoginRequest) -> dict:
     user = auth.verify_login(_db(), req.company_id, req.username, req.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid username or password")
-    token = auth.mint_token(req.company_id, user["username"], user["groups"])
+    token = auth.mint_token(req.company_id, user["username"], user["groups"], user["role"])
     return {"token": token, "company_id": req.company_id, "user": user}
 
 
@@ -214,19 +229,42 @@ def auth_me(authorization: str | None = Header(None)) -> dict:
     tok = auth.parse_token(authorization)
     if not tok:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    return {"company_id": tok["company_id"], "username": tok["username"], "groups": tok["groups"]}
+    return {"company_id": tok["company_id"], "username": tok["username"],
+            "groups": tok["groups"], "role": tok.get("role", "member")}
+
+
+@app.get("/admin/users")
+def admin_list_users(company_id: str, authorization: str | None = Header(None)) -> list[dict]:
+    cid, _, _ = _require(authorization, "admin")
+    return auth.list_users(_db(), cid)
+
+
+class UpdateUserRequest(BaseModel):
+    username: str
+    role: str
+    groups: list[str] = []
+
+
+@app.post("/admin/users/update")
+def admin_update_user(req: UpdateUserRequest, authorization: str | None = Header(None)) -> dict:
+    cid, _, _ = _require(authorization, "admin")
+    auth.update_user(_db(), cid, req.username, req.role, req.groups)
+    return {"ok": True}
 
 
 @app.post("/documents/audience")
 def set_document_audience(req: AudienceRequest, authorization: str | None = Header(None)) -> dict:
-    """Set which groups can see a document ('everyone' = public)."""
+    """Set which groups can see a document ('everyone' = public). Editor+."""
+    _require(authorization, "editor")
     analytics.set_audience(_db(), req.doc_id, req.audience)
     return {"ok": True}
 
 
 @app.post("/ingest")
-async def ingest_upload(company_id: str = Form(...), file: UploadFile = File(...)) -> dict:
-    """Accept a document upload (.csv/.json/.txt/.md/.pdf/.docx) and run ingestion."""
+async def ingest_upload(company_id: str = Form(...), file: UploadFile = File(...),
+                        authorization: str | None = Header(None)) -> dict:
+    """Accept a document upload (.csv/.json/.txt/.md/.pdf/.docx) and run ingestion. Editor+."""
+    _require(authorization, "editor")
     suffix = Path(file.filename or "upload.csv").suffix or ".csv"
     tmp_dir = Path(tempfile.gettempdir()) / "lore_uploads"
     tmp_dir.mkdir(parents=True, exist_ok=True)
@@ -240,8 +278,9 @@ async def ingest_upload(company_id: str = Form(...), file: UploadFile = File(...
 
 
 @app.post("/ingest-drive")
-def ingest_drive_folder(req: DriveRequest) -> dict:
-    """Ingest a shared Google Drive folder (needs the drive extra + service-account creds)."""
+def ingest_drive_folder(req: DriveRequest, authorization: str | None = Header(None)) -> dict:
+    """Ingest a shared Google Drive folder (needs the drive extra + service-account creds). Editor+."""
+    _require(authorization, "editor")
     try:
         return _with_conflicts(ingest_drive(req.company_id, req.folder))
     except Exception as exc:
@@ -251,7 +290,7 @@ def ingest_drive_folder(req: DriveRequest) -> dict:
 @app.post("/ask")
 def ask(req: AskRequest, authorization: str | None = Header(None)) -> dict:
     """One-shot cited answer (used by tools/tests); also logs the question."""
-    company_id, groups = _identity(req.company_id, authorization)
+    company_id, groups, _ = _identity(req.company_id, authorization)
     history = [t.model_dump() for t in req.history]
     r = retrieve(_db(), company_id, req.question, groups=groups)
     result = synthesize(req.question, r, history)
@@ -272,7 +311,7 @@ def ask_stream(req: AskRequest, authorization: str | None = Header(None)) -> Str
         {"type":"token","t":"..."}   (repeated)
         {"type":"done","sources":[...]}   (only the citations actually used)
     """
-    company_id, groups = _identity(req.company_id, authorization)
+    company_id, groups, _ = _identity(req.company_id, authorization)
     question = req.question
     history = [t.model_dump() for t in req.history]
     r = retrieve(_db(), company_id, question, groups=groups)
@@ -319,14 +358,16 @@ def gaps(company_id: str) -> list[dict]:
 
 
 @app.post("/gaps/draft")
-def gap_draft(req: QuestionRequest) -> dict:
-    """LLM-draft a document answering an unanswered question (for review + save)."""
+def gap_draft(req: QuestionRequest, authorization: str | None = Header(None)) -> dict:
+    """LLM-draft a document answering an unanswered question (for review + save). Editor+."""
+    _require(authorization, "editor")
     return analytics.draft_answer(req.company_id, req.question)
 
 
 @app.post("/ingest-text")
-def ingest_text_doc(req: TextRequest) -> dict:
-    """Ingest a pasted or drafted document (title + body)."""
+def ingest_text_doc(req: TextRequest, authorization: str | None = Header(None)) -> dict:
+    """Ingest a pasted or drafted document (title + body). Editor+."""
+    _require(authorization, "editor")
     try:
         return _with_conflicts(ingest_text(req.company_id, req.title, req.text))
     except Exception as exc:
@@ -336,7 +377,7 @@ def ingest_text_doc(req: TextRequest) -> dict:
 @app.get("/content-health")
 def content_health(company_id: str, authorization: str | None = Header(None)) -> dict:
     """Conflicts + duplicates across docs, plus never-cited and stale docs."""
-    cid, groups = _identity(company_id, authorization)
+    cid, groups, _ = _identity(company_id, authorization)
     result = health.content_health(_db(), cid, groups=groups)
     result["never_cited"] = analytics.never_cited_docs(_db(), cid)
     result["stale"] = queries.find_stale_docs(_db(), cid)
@@ -344,8 +385,9 @@ def content_health(company_id: str, authorization: str | None = Header(None)) ->
 
 
 @app.post("/documents/verify")
-def verify_document(req: VerifyRequest) -> dict:
-    """Mark a document reviewed/verified now, with an owner (Trust: ownership)."""
+def verify_document(req: VerifyRequest, authorization: str | None = Header(None)) -> dict:
+    """Mark a document reviewed/verified now, with an owner (Trust: ownership). Editor+."""
+    _require(authorization, "editor")
     analytics.verify_document(_db(), req.doc_id, req.owner)
     return {"ok": True}
 
@@ -362,8 +404,9 @@ def get_escalations(company_id: str) -> list[dict]:
 
 
 @app.post("/escalations/resolve")
-def resolve_escalation(req: ResolveRequest) -> dict:
-    """HR answers -> saved into the knowledge base + escalation closed."""
+def resolve_escalation(req: ResolveRequest, authorization: str | None = Header(None)) -> dict:
+    """HR answers -> saved into the knowledge base + escalation closed. Editor+."""
+    _require(authorization, "editor")
     try:
         return escalations.resolve(_db(), req.company_id, req.escalation_id, req.answer)
     except ValueError as exc:
@@ -400,7 +443,8 @@ def get_glossary(company_id: str) -> list[dict]:
 
 
 @app.post("/glossary")
-def add_glossary(req: GlossaryRequest) -> dict:
+def add_glossary(req: GlossaryRequest, authorization: str | None = Header(None)) -> dict:
+    _require(authorization, "editor")
     glossary.add_term(_db(), req.company_id, req.term, req.definition)
     return {"ok": True}
 
@@ -412,13 +456,13 @@ def questions(company_id: str) -> list[dict]:
 
 @app.get("/documents")
 def documents(company_id: str, authorization: str | None = Header(None)) -> list[dict]:
-    cid, groups = _identity(company_id, authorization)
+    cid, groups, _ = _identity(company_id, authorization)
     return analytics.list_documents(_db(), cid, groups=groups)
 
 
 @app.get("/documents/{doc_id:path}")
 def document(doc_id: str, company_id: str, authorization: str | None = Header(None)) -> dict:
-    cid, groups = _identity(company_id, authorization)
+    cid, groups, _ = _identity(company_id, authorization)
     doc = analytics.get_document(_db(), cid, doc_id, groups=groups)
     if doc is None:
         raise HTTPException(status_code=404, detail="document not found")
@@ -427,7 +471,7 @@ def document(doc_id: str, company_id: str, authorization: str | None = Header(No
 
 @app.get("/search")
 def search(company_id: str, query: str, top_k: int = 8, authorization: str | None = Header(None)) -> list[dict]:
-    cid, groups = _identity(company_id, authorization)
+    cid, groups, _ = _identity(company_id, authorization)
     return deep_search_facts(_db(), cid, query, top_k, groups=groups)
 
 

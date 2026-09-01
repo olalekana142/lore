@@ -79,10 +79,11 @@ def main() -> None:
     )
     for did in comp.get("doc_ids", []):
         analytics.set_audience(conn, did, ["hr"])  # restricted: only the 'hr' group can see it
-    auth.create_user(conn, COMPANY, "alice", "alice", "Alice (Engineering)", ["engineering"])
-    auth.create_user(conn, COMPANY, "hr_admin", "hr", "HR Admin", ["hr"])
-    auth.create_user(conn, COMPANY, "sam", "sam", "Sam (New Hire)", [])
-    print("[seed] users: alice/alice, hr_admin/hr, sam/sam; comp doc restricted to 'hr'")
+    auth.create_user(conn, COMPANY, "boss", "boss", "Dana (Admin)", ["hr", "engineering"], role="admin")
+    auth.create_user(conn, COMPANY, "hr_admin", "hr", "HR Admin", ["hr"], role="editor")
+    auth.create_user(conn, COMPANY, "alice", "alice", "Alice (Engineering)", ["engineering"], role="member")
+    auth.create_user(conn, COMPANY, "sam", "sam", "Sam (New Hire)", [], role="member")
+    print("[seed] users: boss/boss (admin), hr_admin/hr (editor), alice/alice (member), sam/sam (member)")
     print("[seed] done.")
 
 

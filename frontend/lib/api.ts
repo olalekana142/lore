@@ -250,23 +250,42 @@ export async function getContentHealth(companyId: string): Promise<ContentHealth
 export interface AuthUser {
   username: string;
   name: string;
+  role: string;
   groups: string[];
 }
 
-export async function login(companyId: string, username: string, password: string): Promise<{ token: string; company_id: string; user: AuthUser }> {
-  const res = await j<{ token: string; company_id: string; user: AuthUser }>(
-    await fetch(`${BASE}/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ company_id: companyId, username, password }),
-    }),
-  );
+type AuthResult = { token: string; company_id: string; user: AuthUser };
+
+function persist(res: AuthResult) {
   try {
     localStorage.setItem("lore.token", res.token);
     localStorage.setItem("lore.user", JSON.stringify({ ...res.user, company_id: res.company_id }));
   } catch {
     /* ignore */
   }
+}
+
+export async function login(companyId: string, username: string, password: string): Promise<AuthResult> {
+  const res = await j<AuthResult>(
+    await fetch(`${BASE}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company_id: companyId, username, password }),
+    }),
+  );
+  persist(res);
+  return res;
+}
+
+export async function register(companyId: string, username: string, password: string, name: string): Promise<AuthResult> {
+  const res = await j<AuthResult>(
+    await fetch(`${BASE}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company_id: companyId, username, password, name }),
+    }),
+  );
+  persist(res);
   return res;
 }
 
@@ -277,6 +296,26 @@ export function logout(): void {
   } catch {
     /* ignore */
   }
+}
+
+// --- admin: user management ---
+export interface ManagedUser {
+  username: string;
+  name: string;
+  role: string;
+  groups: string[];
+}
+
+export async function listUsers(companyId: string): Promise<ManagedUser[]> {
+  return j(await fetch(`${BASE}/admin/users?${qs({ company_id: companyId })}`, { headers: authHeader() }));
+}
+
+export async function updateUser(companyId: string, username: string, role: string, groups: string[]): Promise<void> {
+  await fetch(`${BASE}/admin/users/update`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeader() },
+    body: JSON.stringify({ username, role, groups }),
+  });
 }
 
 export async function draftGapAnswer(companyId: string, question: string): Promise<Draft> {

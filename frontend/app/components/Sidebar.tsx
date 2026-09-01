@@ -1,10 +1,11 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCompany } from "@/lib/useCompany";
 import { useTheme } from "@/lib/useTheme";
-import { useAuth } from "@/lib/useAuth";
+import { useAuth, atLeast } from "@/lib/useAuth";
 import { logout as apiLogout } from "@/lib/api";
 import {
   IconHome,
@@ -14,19 +15,28 @@ import {
   IconUpload,
   IconHealth,
   IconRocket,
+  IconUsers,
   IconSun,
   IconMoon,
 } from "./icons";
 
-const NAV = [
+type Min = "member" | "editor" | "admin" | undefined;
+const NAV: { href: string; label: string; Icon: (p: { size?: number }) => ReactNode; min?: Min }[] = [
   { href: "/", label: "Dashboard", Icon: IconHome },
   { href: "/ask", label: "Ask Lore", Icon: IconChat },
   { href: "/library", label: "Documents", Icon: IconLibrary },
-  { href: "/gaps", label: "Knowledge gaps", Icon: IconGap },
-  { href: "/health", label: "Content health", Icon: IconHealth },
   { href: "/onboarding", label: "Onboarding", Icon: IconRocket },
-  { href: "/connect", label: "Add documents", Icon: IconUpload },
+  { href: "/gaps", label: "Knowledge gaps", Icon: IconGap, min: "editor" },
+  { href: "/health", label: "Content health", Icon: IconHealth, min: "editor" },
+  { href: "/connect", label: "Add documents", Icon: IconUpload, min: "editor" },
+  { href: "/admin", label: "Users & roles", Icon: IconUsers, min: "admin" },
 ];
+
+const ROLE_STYLE: Record<string, string> = {
+  admin: "var(--accent)",
+  editor: "var(--green)",
+  member: "var(--muted)",
+};
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -57,7 +67,7 @@ export default function Sidebar() {
       </Link>
 
       <nav className="flex flex-col gap-0.5">
-        {NAV.map(({ href, label, Icon }) => {
+        {NAV.filter((item) => !item.min || atLeast(user?.role, item.min)).map(({ href, label, Icon }) => {
           const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           return (
             <Link
@@ -92,9 +102,14 @@ export default function Sidebar() {
                 {user.name.charAt(0).toUpperCase()}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold">{user.name}</div>
+                <div className="flex items-center gap-1.5">
+                  <span className="truncate text-sm font-semibold">{user.name}</span>
+                  <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase" style={{ color: ROLE_STYLE[user.role] ?? "var(--muted)", background: "var(--surface-2)" }}>
+                    {user.role}
+                  </span>
+                </div>
                 <div className="truncate text-[10px] text-muted-dim">
-                  {user.company_id} · {user.groups.length ? user.groups.join(", ") : "no groups"}
+                  {user.company_id}{user.groups.length ? " · " + user.groups.join(", ") : ""}
                 </div>
               </div>
             </div>

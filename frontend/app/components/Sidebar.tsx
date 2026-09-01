@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCompany } from "@/lib/useCompany";
 import { useTheme } from "@/lib/useTheme";
-import { useAuth, atLeast } from "@/lib/useAuth";
+import { useAuth, atLeast, clearGuest } from "@/lib/useAuth";
 import { logout as apiLogout } from "@/lib/api";
 import {
   IconHome,
@@ -47,8 +47,9 @@ export default function Sidebar() {
 
   const signOut = () => {
     apiLogout();
+    clearGuest();
     refresh();
-    router.push("/login");
+    router.push("/welcome");
   };
 
   return (

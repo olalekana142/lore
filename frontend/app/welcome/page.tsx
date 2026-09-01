@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useTheme } from "@/lib/useTheme";
+import { enterGuest } from "@/lib/useAuth";
 import {
   IconChat, IconGap, IconRocket, IconZap, IconHealth,
   IconUsers, IconSun, IconMoon, IconArrow, IconCheck,
@@ -24,6 +26,8 @@ const STEPS = [
 
 export default function Welcome() {
   const [theme, toggleTheme, ready] = useTheme();
+  const router = useRouter();
+  const demo = () => { enterGuest(); router.push("/"); };
 
   return (
     <div className="min-h-screen">
@@ -74,7 +78,7 @@ export default function Welcome() {
               <Link href="/login" className="btn-primary flex items-center gap-2 px-6 py-3 text-sm">
                 Get started free <IconArrow size={16} />
               </Link>
-              <Link href="/" className="btn-ghost px-6 py-3 text-sm">Explore the live demo</Link>
+              <button onClick={demo} className="btn-ghost px-6 py-3 text-sm">Explore the live demo</button>
             </div>
             <p className="animate-fade-up mt-3 text-xs text-muted-dim" style={{ animationDelay: "220ms" }}>No setup — a sample company is preloaded.</p>
           </div>
@@ -205,7 +209,7 @@ export default function Welcome() {
           <p className="mx-auto mt-3 max-w-md text-muted">Cited, current, and scoped to who&apos;s asking. Try the live demo — no signup needed.</p>
           <div className="mt-7 flex flex-wrap justify-center gap-3">
             <Link href="/login" className="btn-primary flex items-center gap-2 px-6 py-3 text-sm">Get started <IconArrow size={16} /></Link>
-            <Link href="/" className="btn-ghost px-6 py-3 text-sm">Explore the demo</Link>
+            <button onClick={demo} className="btn-ghost px-6 py-3 text-sm">Explore the demo</button>
           </div>
         </div>
       </section>
@@ -222,7 +226,7 @@ export default function Welcome() {
           <div className="flex gap-5">
             <a href="#features" className="hover:text-foreground">Features</a>
             <Link href="/login" className="hover:text-foreground">Sign in</Link>
-            <Link href="/" className="hover:text-foreground">Demo</Link>
+            <button onClick={demo} className="hover:text-foreground">Demo</button>
           </div>
         </div>
       </footer>

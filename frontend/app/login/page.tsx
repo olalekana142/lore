@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { login, register } from "@/lib/api";
 import { useCompany } from "@/lib/useCompany";
+import { enterGuest } from "@/lib/useAuth";
 import { IconCheck, IconArrow } from "../components/icons";
 
 const DEMO = [
@@ -132,7 +133,7 @@ export default function LoginPage() {
           )}
 
           <p className="mt-5 text-center text-xs text-muted-dim">
-            Or <button onClick={() => router.push("/")} className="text-accent hover:underline">continue as guest</button> — public documents only.
+            Or <button onClick={() => { enterGuest(); router.push("/"); }} className="text-accent hover:underline">continue as guest</button> — public documents only.
           </p>
         </div>
       </div>

@@ -2,16 +2,29 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { getOverview, type Overview } from "@/lib/api";
 import { useCompany } from "@/lib/useCompany";
+import { useAuth, isGuest } from "@/lib/useAuth";
 import { relativeDate } from "@/lib/format";
 import { StatTile, ErrorNote } from "./components/ui";
 import { IconChat, IconUpload, IconGap, IconClock, IconArrow } from "./components/icons";
 
 export default function Dashboard() {
   const [companyId, , ready] = useCompany();
+  const { user, ready: authReady } = useAuth();
+  const router = useRouter();
+  const [allowed, setAllowed] = useState(false);
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Front door: first-time / logged-out visitors see the landing page; logged-in users
+  // and explicit guests get the dashboard.
+  useEffect(() => {
+    if (!authReady) return;
+    if (user || isGuest()) setAllowed(true);
+    else router.replace("/welcome");
+  }, [authReady, user, router]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -23,8 +36,10 @@ export default function Dashboard() {
   }, [companyId]);
 
   useEffect(() => {
-    if (ready) load();
-  }, [ready, load]);
+    if (ready && allowed) load();
+  }, [ready, allowed, load]);
+
+  if (!allowed) return null;
 
   return (
     <div className="mx-auto max-w-5xl">

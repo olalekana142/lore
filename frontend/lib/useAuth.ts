@@ -16,6 +16,30 @@ export function atLeast(role: string | undefined, min: "member" | "editor" | "ad
   return (rank[role ?? "anonymous"] ?? 0) >= rank[min];
 }
 
+// "Guest" = someone who chose to explore the demo without an account. Lets them into the
+// app (public docs) while first-time visitors to the root still see the landing page.
+export function isGuest(): boolean {
+  try {
+    return localStorage.getItem("lore.guest") === "1";
+  } catch {
+    return false;
+  }
+}
+export function enterGuest(): void {
+  try {
+    localStorage.setItem("lore.guest", "1");
+  } catch {
+    /* ignore */
+  }
+}
+export function clearGuest(): void {
+  try {
+    localStorage.removeItem("lore.guest");
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Reads the logged-in user from localStorage (set by lib/api.login). */
 export function useAuth(): { user: SessionUser | null; ready: boolean; refresh: () => void } {
   const [user, setUser] = useState<SessionUser | null>(null);

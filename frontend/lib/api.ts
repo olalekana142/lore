@@ -234,8 +234,19 @@ export async function ingestDrive(companyId: string, folder: string): Promise<In
   );
 }
 
+export interface HomeData {
+  document_count: number;
+  recent_docs: DocSummary[];
+  popular_questions: string[];
+  topics: TopicCoverage[];
+}
+
+export async function getHome(companyId: string): Promise<HomeData> {
+  return j(await fetch(`${BASE}/home?${qs({ company_id: companyId })}`, { headers: authHeader() }));
+}
+
 export async function getOverview(companyId: string): Promise<Overview> {
-  return j(await fetch(`${BASE}/overview?${qs({ company_id: companyId })}`));
+  return j(await fetch(`${BASE}/overview?${qs({ company_id: companyId })}`, { headers: authHeader() }));
 }
 
 export async function getGaps(companyId: string): Promise<Gap[]> {

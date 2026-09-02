@@ -37,6 +37,17 @@ export default function AskPage() {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Launch straight into a question passed via ?q= (from the home page / popular questions).
+  useEffect(() => {
+    try {
+      const q = new URLSearchParams(window.location.search).get("q");
+      if (q) run(q);
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function run(question: string) {
     if (!question.trim() || busy) return;
     setInput("");

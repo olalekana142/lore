@@ -345,8 +345,17 @@ def post_feedback(req: FeedbackRequest) -> dict:
     return {"ok": True}
 
 
+@app.get("/home")
+def home(company_id: str, authorization: str | None = Header(None)) -> dict:
+    """Employee home: recent + popular, scoped to the caller's permissions."""
+    cid, groups, _ = _identity(company_id, authorization)
+    return analytics.home(_db(), cid, groups=groups)
+
+
 @app.get("/overview")
-def overview(company_id: str) -> dict:
+def overview(company_id: str, authorization: str | None = Header(None)) -> dict:
+    """Knowledge-ops dashboard (gaps, ROI, review queue). Editor+ only."""
+    _require(authorization, "editor")
     data = analytics.overview(_db(), company_id)
     data["feedback"] = feedback.summary(_db(), company_id)
     return data

@@ -237,6 +237,20 @@ def draft_answer(company_id: str, question: str) -> dict:
     }
 
 
+def home(conn: kuzu.Connection, company_id: str, groups: list[str] | None = None) -> dict:
+    """Employee-facing home data: what's new + popular, scoped to what they can see.
+
+    Deliberately excludes ops analytics (gaps, ROI, never-cited) — those are for editors.
+    """
+    docs = list_documents(conn, company_id, groups)
+    return {
+        "document_count": len(docs),
+        "recent_docs": docs[:6],  # list_documents is ordered by updated_at desc
+        "popular_questions": [q["question"] for q in top_questions(conn, company_id, limit=6)],
+        "topics": topic_coverage(conn, company_id, limit=8),
+    }
+
+
 def overview(conn: kuzu.Connection, company_id: str) -> dict:
     """Headline stats + lists for the home dashboard."""
     docs = _scalar(conn, "MATCH (c:Company {id:$cid})-[:OWNS]->(d:Document) RETURN count(d)", company_id)

@@ -383,6 +383,19 @@ def ingest_text_doc(req: TextRequest, authorization: str | None = Header(None)) 
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+class SupersedeRequest(BaseModel):
+    company_id: str
+    doc_id: str
+
+
+@app.post("/documents/supersede")
+def supersede_document(req: SupersedeRequest, authorization: str | None = Header(None)) -> dict:
+    """Retire a document (resolve a conflict in favour of the other). Editor+."""
+    _require(authorization, "editor")
+    analytics.supersede_document(_db(), req.doc_id)
+    return {"ok": True}
+
+
 @app.get("/audit")
 def audit(company_id: str, authorization: str | None = Header(None)) -> dict:
     """Knowledge-quality scorecard (editor+). Fast; conflict counts come from /content-health."""

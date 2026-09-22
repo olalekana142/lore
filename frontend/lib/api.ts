@@ -148,12 +148,22 @@ export interface FactRef {
   statement: string;
   doc_id: string;
   title: string;
+  updated_at?: string | null;
+  authority?: number;
+  verified?: boolean;
+  superseded?: boolean;
+}
+export interface Recommend {
+  winner_doc: string;
+  loser_doc: string;
+  reason: string;
 }
 export interface HealthPair {
   a: FactRef;
   b: FactRef;
   similarity: number;
   reason: string;
+  recommend?: Recommend;
 }
 export interface ContentHealth {
   conflicts: HealthPair[];
@@ -276,6 +286,14 @@ export interface Audit {
 
 export async function getAudit(companyId: string): Promise<Audit> {
   return j(await fetch(`${BASE}/audit?${qs({ company_id: companyId })}`, { headers: authHeader() }));
+}
+
+export async function supersedeDocument(companyId: string, docId: string): Promise<void> {
+  await fetch(`${BASE}/documents/supersede`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeader() },
+    body: JSON.stringify({ company_id: companyId, doc_id: docId }),
+  });
 }
 
 // --- auth ---

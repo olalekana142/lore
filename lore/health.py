@@ -48,24 +48,59 @@ PAIRS:
 
 
 def _active_facts(conn: kuzu.Connection, company_id: str, groups: list[str] | None = None) -> list[dict]:
-    """Facts from visible docs. groups=None -> no filtering (admin/upload-time use)."""
+    """Facts from visible docs (with each doc's provenance for conflict explanation)."""
+    from datetime import datetime
+
     from lore.auth import can_see
 
     res = conn.execute(
         """MATCH (c:Company {id:$cid})-[:OWNS]->(d:Document)-[:STATES]->(f:Fact)
-           RETURN f.id, f.statement, f.embedding, d.id, d.title, d.audience""",
+           RETURN f.id, f.statement, f.embedding, d.id, d.title, d.audience,
+                  d.updated_at, d.authority, d.verified_at, d.effective_to""",
         {"cid": company_id},
     )
+    now = datetime.now()
     out: list[dict] = []
     while res.has_next():
-        fid, statement, emb, did, title, audience = res.get_next()
+        fid, statement, emb, did, title, audience, updated_at, authority, verified_at, eff_to = res.get_next()
         if not emb:
             continue
         if groups is not None and not can_see(audience, groups):
             continue
-        out.append({"fact_id": fid, "statement": statement, "emb": emb,
-                    "doc_id": did, "title": title})
+        out.append({
+            "fact_id": fid, "statement": statement, "emb": emb, "doc_id": did, "title": title,
+            "updated_at": updated_at, "authority": authority or 60,
+            "verified": verified_at is not None,
+            "superseded": bool(eff_to and eff_to < now),
+        })
     return out
+
+
+def _side(f: dict) -> dict:
+    return {
+        "statement": f["statement"], "doc_id": f["doc_id"], "title": f["title"],
+        "updated_at": f["updated_at"].isoformat() if f.get("updated_at") else None,
+        "authority": f["authority"], "verified": f["verified"], "superseded": f["superseded"],
+    }
+
+
+def _recommend(a: dict, b: dict) -> dict:
+    """Pick the authoritative side of a conflict: current > higher authority > newer > verified."""
+    def key(x):
+        return (0 if x["superseded"] else 1, x["authority"],
+                x["updated_at"].timestamp() if x.get("updated_at") else 0, int(x["verified"]))
+    winner, loser = (a, b) if key(a) >= key(b) else (b, a)
+    bits = []
+    if loser["superseded"] and not winner["superseded"]:
+        bits.append("the other is superseded")
+    if winner["authority"] > loser["authority"]:
+        bits.append("higher authority")
+    if winner.get("updated_at") and loser.get("updated_at") and winner["updated_at"] > loser["updated_at"]:
+        bits.append("more recent")
+    if winner["verified"] and not loser["verified"]:
+        bits.append("verified")
+    reason = f"“{winner['title']}” wins ({', '.join(bits) or 'preferred'}); answers use it."
+    return {"winner_doc": winner["doc_id"], "loser_doc": loser["doc_id"], "reason": reason}
 
 
 def _candidate_pairs(facts: list[dict]) -> list[tuple[dict, dict, float]]:
@@ -147,11 +182,8 @@ def conflicts_for_docs(conn: kuzu.Connection, company_id: str, doc_ids: list[str
     for idx, (a, b, sim) in enumerate(scored, start=1):
         v = verdicts.get(idx, {})
         if (v.get("relationship") or "").lower() == "conflict":
-            conflicts.append({
-                "a": {"statement": a["statement"], "doc_id": a["doc_id"], "title": a["title"]},
-                "b": {"statement": b["statement"], "doc_id": b["doc_id"], "title": b["title"]},
-                "similarity": sim, "reason": v.get("reason", ""),
-            })
+            conflicts.append({"a": _side(a), "b": _side(b), "similarity": sim,
+                              "reason": v.get("reason", ""), "recommend": _recommend(a, b)})
     return conflicts
 
 
@@ -167,11 +199,10 @@ def content_health(conn: kuzu.Connection, company_id: str, groups: list[str] | N
         rel = (v.get("relationship") or "").lower()
         if rel not in ("conflict", "duplicate"):
             continue
-        entry = {
-            "a": {"statement": a["statement"], "doc_id": a["doc_id"], "title": a["title"]},
-            "b": {"statement": b["statement"], "doc_id": b["doc_id"], "title": b["title"]},
-            "similarity": sim,
-            "reason": v.get("reason", ""),
-        }
-        (conflicts if rel == "conflict" else duplicates).append(entry)
+        entry = {"a": _side(a), "b": _side(b), "similarity": sim, "reason": v.get("reason", "")}
+        if rel == "conflict":
+            entry["recommend"] = _recommend(a, b)
+            conflicts.append(entry)
+        else:
+            duplicates.append(entry)
     return {"conflicts": conflicts, "duplicates": duplicates}

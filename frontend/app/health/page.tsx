@@ -7,18 +7,22 @@ import {
   getGlossary,
   addGlossaryTerm,
   getAudit,
+  supersedeDocument,
   type ContentHealth,
   type HealthPair,
   type GlossaryTerm,
   type Audit,
 } from "@/lib/api";
 import { useCompany } from "@/lib/useCompany";
+import { useAuth, atLeast } from "@/lib/useAuth";
 import { relativeDate } from "@/lib/format";
 import { PageHeader, ErrorNote } from "../components/ui";
 import { IconAlert, IconCopy, IconClock, IconBook } from "../components/icons";
 
 export default function HealthPage() {
   const [companyId, , ready] = useCompany();
+  const { user } = useAuth();
+  const canEdit = atLeast(user?.role, "editor");
   const [data, setData] = useState<ContentHealth | null>(null);
   const [audit, setAudit] = useState<Audit | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +70,7 @@ export default function HealthPage() {
             tone="red"
             empty="No conflicts found — your docs agree with each other."
           >
-            {data.conflicts.map((c, i) => <PairCard key={i} pair={c} kind="conflict" />)}
+            {data.conflicts.map((c, i) => <PairCard key={i} pair={c} kind="conflict" companyId={companyId} canEdit={canEdit} onResolved={load} />)}
           </Section>
 
           <Section
@@ -76,7 +80,7 @@ export default function HealthPage() {
             tone="amber"
             empty="No duplicate content detected."
           >
-            {data.duplicates.map((d, i) => <PairCard key={i} pair={d} kind="duplicate" />)}
+            {data.duplicates.map((d, i) => <PairCard key={i} pair={d} kind="duplicate" companyId={companyId} canEdit={canEdit} onResolved={load} />)}
           </Section>
 
           <Section
@@ -202,22 +206,70 @@ function Section({
   );
 }
 
-function PairCard({ pair, kind }: { pair: HealthPair; kind: "conflict" | "duplicate" }) {
+function tierName(a?: number): string {
+  const v = a ?? 60;
+  return v >= 90 ? "Official" : v >= 80 ? "Approved" : v >= 60 ? "Standard" : "Low authority";
+}
+
+function PairCard({ pair, kind, companyId, canEdit, onResolved }: {
+  pair: HealthPair; kind: "conflict" | "duplicate"; companyId: string; canEdit: boolean; onResolved: () => void;
+}) {
   const color = kind === "conflict" ? "var(--red)" : "var(--amber)";
   const Icon = kind === "conflict" ? IconAlert : IconCopy;
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const loser = pair.recommend ? [pair.a, pair.b].find((f) => f.doc_id === pair.recommend!.loser_doc) : undefined;
+
+  async function resolve() {
+    if (!loser) return;
+    setBusy(true);
+    try {
+      await supersedeDocument(companyId, loser.doc_id);
+      setDone(true);
+      setTimeout(onResolved, 800);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="card p-4">
       <div className="mb-3 flex items-center gap-2 text-sm font-semibold" style={{ color }}>
         <Icon size={15} /> {pair.reason || (kind === "conflict" ? "Conflicting statements" : "Duplicate content")}
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
-        {[pair.a, pair.b].map((f, i) => (
-          <Link key={i} href={`/library/${f.doc_id}`} className="rounded-lg border border-border bg-surface-2 p-3 transition-colors hover:border-accent">
-            <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-dim">{f.title}</div>
-            <div className="text-sm leading-relaxed">{f.statement}</div>
-          </Link>
-        ))}
+        {[pair.a, pair.b].map((f, i) => {
+          const wins = pair.recommend && f.doc_id === pair.recommend.winner_doc;
+          return (
+            <Link key={i} href={`/library/${f.doc_id}`}
+              className="rounded-lg border bg-surface-2 p-3 transition-colors hover:border-accent"
+              style={{ borderColor: wins ? "var(--green)" : "var(--border)" }}>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-dim">{f.title}</span>
+                {wins && <span className="text-[10px] font-bold" style={{ color: "var(--green)" }}>AUTHORITATIVE</span>}
+              </div>
+              <div className="text-sm leading-relaxed">{f.statement}</div>
+              <div className="mt-1.5 flex flex-wrap gap-x-2 text-[10px] text-muted-dim">
+                <span>{tierName(f.authority)}</span>
+                {f.verified && <span style={{ color: "var(--green)" }}>· verified</span>}
+                {f.superseded && <span style={{ color: "var(--amber)" }}>· superseded</span>}
+                {f.updated_at && <span>· {relativeDate(f.updated_at)}</span>}
+              </div>
+            </Link>
+          );
+        })}
       </div>
+      {kind === "conflict" && pair.recommend && (
+        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface p-2.5">
+          <span className="text-xs text-muted">🧭 {pair.recommend.reason}</span>
+          {canEdit && loser && !loser.superseded && !done && (
+            <button onClick={resolve} disabled={busy} className="btn-ghost ml-auto px-3 py-1.5 text-xs">
+              {busy ? "Resolving…" : `Retire “${loser.title}”`}
+            </button>
+          )}
+          {done && <span className="ml-auto text-xs" style={{ color: "var(--green)" }}>✓ Resolved</span>}
+        </div>
+      )}
     </div>
   );
 }

@@ -407,6 +407,11 @@ def get_document(conn: kuzu.Connection, company_id: str, doc_id: str,
     }
 
 
+def supersede_document(conn: kuzu.Connection, doc_id: str) -> None:
+    """Retire a document now (effective_to = now) — resolves a conflict in favour of the other."""
+    conn.execute("MATCH (d:Document {id:$id}) SET d.effective_to=$now", {"id": doc_id, "now": datetime.now()})
+
+
 def set_audience(conn: kuzu.Connection, doc_id: str, audience: list[str]) -> None:
     """Set which groups can see a document ('everyone' = public)."""
     aud = audience or ["everyone"]

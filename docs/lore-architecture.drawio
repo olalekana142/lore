@@ -1,0 +1,103 @@
+<mxfile host="app.diagrams.net" agent="Lore" version="24.0.0">
+  <diagram id="lore-arch" name="Lore Architecture">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="Lore — Company Knowledge Base (GraphRAG)  ·  system architecture" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="10" width="900" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- ============ ACTORS ============ -->
+        <mxCell id="a_emp" value="Employee&#10;(member)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="55" y="55" width="150" height="46" as="geometry"/></mxCell>
+        <mxCell id="a_edit" value="HR / Curator&#10;(editor)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="235" y="55" width="150" height="46" as="geometry"/></mxCell>
+        <mxCell id="a_admin" value="Admin" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="415" y="55" width="150" height="46" as="geometry"/></mxCell>
+        <mxCell id="a_guest" value="Guest&#10;(public docs)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="595" y="55" width="150" height="46" as="geometry"/></mxCell>
+        <mxCell id="a_agent" value="Agent / Bot&#10;(Claude Code, etc.)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="1430" y="55" width="170" height="46" as="geometry"/></mxCell>
+
+        <!-- ============ FRONTEND ============ -->
+        <mxCell id="fe_bg" value="Frontend — Next.js 16 (App Router · Tailwind · dark/light · role-based UI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;verticalAlign=top;fontStyle=1;fontSize=13;" vertex="1" parent="1"><mxGeometry x="40" y="130" width="1560" height="120" as="geometry"/></mxCell>
+        <mxCell id="fe1" value="Landing &amp; Login&#10;(sign-in / sign-up · guest)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1"><mxGeometry x="55" y="170" width="165" height="60" as="geometry"/></mxCell>
+        <mxCell id="fe2" value="Dashboard&#10;(role-based: MemberHome / Ops / Admin)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1"><mxGeometry x="230" y="170" width="165" height="60" as="geometry"/></mxCell>
+        <mxCell id="fe3" value="Ask Lore&#10;(chat · streaming · citations · feedback)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1"><mxGeometry x="405" y="170" width="165" height="60" as="geometry"/></mxCell>
+        <mxCell id="fe4" value="Documents&#10;(library · detail · provenance)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1"><mxGeometry x="580" y="170" width="165" height="60" as="geometry"/></mxCell>
+        <mxCell id="fe5" value="Knowledge Gaps&#10;(HR inbox · auto-draft)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1"><mxGeometry x="755" y="170" width="165" height="60" as="geometry"/></mxCell>
+        <mxCell id="fe6" value="Content Health&#10;(conflicts · dupes · glossary)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1"><mxGeometry x="930" y="170" width="165" height="60" as="geometry"/></mxCell>
+        <mxCell id="fe7" value="Onboarding&#10;(playbook · quizzes)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1105" y="170" width="150" height="60" as="geometry"/></mxCell>
+        <mxCell id="fe8" value="Add Documents&#10;(upload · Drive)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1265" y="170" width="150" height="60" as="geometry"/></mxCell>
+        <mxCell id="fe9" value="Admin&#10;(users &amp; roles)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1425" y="170" width="150" height="60" as="geometry"/></mxCell>
+
+        <!-- ============ API ============ -->
+        <mxCell id="api_bg" value="HTTP API — FastAPI   (Bearer JWT identity · RBAC guard _require(role) on every mutation · per-thread Kùzu connections · CORS)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;verticalAlign=top;fontStyle=1;fontSize=13;" vertex="1" parent="1"><mxGeometry x="40" y="290" width="1560" height="150" as="geometry"/></mxCell>
+        <mxCell id="api1" value="/auth  login · register · me&#10;→ HMAC token (role, groups)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1"><mxGeometry x="60" y="330" width="290" height="46" as="geometry"/></mxCell>
+        <mxCell id="api2" value="/ask · /ask/stream (NDJSON)&#10;retrieve → synthesize + cite" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1"><mxGeometry x="365" y="330" width="290" height="46" as="geometry"/></mxCell>
+        <mxCell id="api3" value="/ingest · /ingest-drive · /ingest-text&#10;(editor+ · conflict alert)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1"><mxGeometry x="670" y="330" width="290" height="46" as="geometry"/></mxCell>
+        <mxCell id="api4" value="/documents · /verify · /audience&#10;/home · /overview (editor+)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1"><mxGeometry x="975" y="330" width="290" height="46" as="geometry"/></mxCell>
+        <mxCell id="api5" value="/admin/users (admin)&#10;/gaps · /gaps/draft (editor+)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1280" y="330" width="290" height="46" as="geometry"/></mxCell>
+        <mxCell id="api6" value="/escalations · /resolve&#10;/feedback" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1"><mxGeometry x="60" y="386" width="290" height="46" as="geometry"/></mxCell>
+        <mxCell id="api7" value="/actions/suggest · /execute&#10;(ticket dispatch)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1"><mxGeometry x="365" y="386" width="290" height="46" as="geometry"/></mxCell>
+        <mxCell id="api8" value="/onboarding/generate · /grade" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1"><mxGeometry x="670" y="386" width="290" height="46" as="geometry"/></mxCell>
+        <mxCell id="api9" value="/glossary · /content-health" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1"><mxGeometry x="975" y="386" width="290" height="46" as="geometry"/></mxCell>
+        <mxCell id="api10" value="/search · /stale · /topics · /health" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1280" y="386" width="290" height="46" as="geometry"/></mxCell>
+
+        <!-- MCP server -->
+        <mxCell id="mcp" value="MCP Server (FastMCP)&#10;tools: ingest · ask_company · search · find_conflicts · ingest_google_drive" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;dashed=1;" vertex="1" parent="1"><mxGeometry x="1280" y="250" width="320" height="34" as="geometry"/></mxCell>
+
+        <!-- ============ CORE SERVICES ============ -->
+        <mxCell id="core_bg" value="Core services — lore/ (Python)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;verticalAlign=top;fontStyle=1;fontSize=13;" vertex="1" parent="1"><mxGeometry x="40" y="480" width="1560" height="150" as="geometry"/></mxCell>
+        <mxCell id="c1" value="auth.py&#10;PBKDF2 pw · HMAC tokens · roles · can_see() ACL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1"><mxGeometry x="60" y="520" width="290" height="46" as="geometry"/></mxCell>
+        <mxCell id="c2" value="retrieval/answer.py&#10;permission filter · glossary expand · synthesize + citations" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1"><mxGeometry x="365" y="520" width="290" height="46" as="geometry"/></mxCell>
+        <mxCell id="c3" value="ingestion/pipeline.py&#10;chunk → extract → embed → dedupe → link" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1"><mxGeometry x="670" y="520" width="290" height="46" as="geometry"/></mxCell>
+        <mxCell id="c4" value="health.py&#10;conflict &amp; duplicate detection (cross-doc)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1"><mxGeometry x="975" y="520" width="290" height="46" as="geometry"/></mxCell>
+        <mxCell id="c5" value="analytics.py&#10;ROI · gaps · home · citations · topics · users" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1280" y="520" width="290" height="46" as="geometry"/></mxCell>
+        <mxCell id="c6" value="onboarding.py&#10;playbook + graded quizzes" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1"><mxGeometry x="60" y="576" width="290" height="46" as="geometry"/></mxCell>
+        <mxCell id="c7" value="actions.py&#10;action suggest + ticket dispatch (sim)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1"><mxGeometry x="365" y="576" width="290" height="46" as="geometry"/></mxCell>
+        <mxCell id="c8" value="glossary.py · escalations.py · feedback.py" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1"><mxGeometry x="670" y="576" width="290" height="46" as="geometry"/></mxCell>
+        <mxCell id="c9" value="retrieval/deep_search.py&#10;semantic fact search" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1"><mxGeometry x="975" y="576" width="290" height="46" as="geometry"/></mxCell>
+        <mxCell id="c10" value="llm.py · embed.py · graph/queries.py · graph/schema.py" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1280" y="576" width="290" height="46" as="geometry"/></mxCell>
+
+        <!-- ============ GRAPH DB ============ -->
+        <mxCell id="g_bg" value="Knowledge Graph — Kùzu (embedded, in-process)     edges: OWNS · STATES · ABOUT · ASKED · DEFINES" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;verticalAlign=top;fontStyle=1;fontSize=13;" vertex="1" parent="1"><mxGeometry x="40" y="670" width="770" height="230" as="geometry"/></mxCell>
+        <mxCell id="n_comp" value="Company" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;fontSize=10;" vertex="1" parent="1"><mxGeometry x="55" y="710" width="140" height="44" as="geometry"/></mxCell>
+        <mxCell id="n_doc" value="Document&#10;{audience, version, verified, cited}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;fontSize=10;" vertex="1" parent="1"><mxGeometry x="205" y="710" width="150" height="44" as="geometry"/></mxCell>
+        <mxCell id="n_fact" value="Fact&#10;{embedding}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;fontSize=10;" vertex="1" parent="1"><mxGeometry x="365" y="710" width="130" height="44" as="geometry"/></mxCell>
+        <mxCell id="n_topic" value="Topic" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;fontSize=10;" vertex="1" parent="1"><mxGeometry x="505" y="710" width="120" height="44" as="geometry"/></mxCell>
+        <mxCell id="n_user" value="User&#10;{role, groups, pw_hash}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;fontSize=10;" vertex="1" parent="1"><mxGeometry x="635" y="710" width="160" height="44" as="geometry"/></mxCell>
+        <mxCell id="n_eq" value="EmployeeQuestion&#10;{topic, counts}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;fontSize=10;" vertex="1" parent="1"><mxGeometry x="55" y="770" width="150" height="44" as="geometry"/></mxCell>
+        <mxCell id="n_gloss" value="GlossaryTerm" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;fontSize=10;" vertex="1" parent="1"><mxGeometry x="215" y="770" width="130" height="44" as="geometry"/></mxCell>
+        <mxCell id="n_fb" value="Feedback" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;fontSize=10;" vertex="1" parent="1"><mxGeometry x="355" y="770" width="120" height="44" as="geometry"/></mxCell>
+        <mxCell id="n_esc" value="Escalation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;fontSize=10;" vertex="1" parent="1"><mxGeometry x="485" y="770" width="130" height="44" as="geometry"/></mxCell>
+        <mxCell id="n_tick" value="Ticket" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;fontSize=10;" vertex="1" parent="1"><mxGeometry x="625" y="770" width="120" height="44" as="geometry"/></mxCell>
+        <mxCell id="g_persist" value="Persistent volume  ·  data/lore.kuzu" style="text;html=1;fontSize=11;fontStyle=2;align=left;" vertex="1" parent="1"><mxGeometry x="55" y="850" width="400" height="20" as="geometry"/></mxCell>
+
+        <!-- ============ AI ============ -->
+        <mxCell id="ai_bg" value="LLM &amp; Embeddings" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;verticalAlign=top;fontStyle=1;fontSize=13;" vertex="1" parent="1"><mxGeometry x="830" y="670" width="360" height="230" as="geometry"/></mxCell>
+        <mxCell id="ai_groq" value="Groq API  (OpenAI-compatible)&#10;• gpt-oss-20b — fact extraction (JSON mode, low reasoning)&#10;• gpt-oss-120b — answers, conflict judging, drafts, grading, streaming" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;fontSize=11;align=left;spacingLeft=8;" vertex="1" parent="1"><mxGeometry x="845" y="710" width="330" height="90" as="geometry"/></mxCell>
+        <mxCell id="ai_embed" value="fastembed  (local, no API key)&#10;BAAI/bge-small-en-v1.5 · 384-dim · cosine similarity + dedupe" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;fontSize=11;align=left;spacingLeft=8;" vertex="1" parent="1"><mxGeometry x="845" y="810" width="330" height="70" as="geometry"/></mxCell>
+
+        <!-- ============ SOURCES ============ -->
+        <mxCell id="src_bg" value="Ingestion sources / adapters" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;verticalAlign=top;fontStyle=1;fontSize=13;" vertex="1" parent="1"><mxGeometry x="1210" y="670" width="390" height="230" as="geometry"/></mxCell>
+        <mxCell id="s_file" value="File upload adapter&#10;CSV · JSON · TXT · MD · PDF · DOCX" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1225" y="710" width="360" height="44" as="geometry"/></mxCell>
+        <mxCell id="s_drive" value="Google Drive adapter&#10;(service-account · export Docs · PDF/DOCX)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1225" y="762" width="360" height="44" as="geometry"/></mxCell>
+        <mxCell id="s_text" value="Paste text / gap auto-drafts / escalation answers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1225" y="814" width="360" height="34" as="geometry"/></mxCell>
+        <mxCell id="s_future" value="(roadmap) DB connector · Slack · SSO" style="text;html=1;fontSize=10;fontStyle=2;align=left;" vertex="1" parent="1"><mxGeometry x="1225" y="852" width="360" height="20" as="geometry"/></mxCell>
+
+        <!-- ============ DEPLOYMENT ============ -->
+        <mxCell id="deploy" value="Deployment — Docker Compose:  api (uvicorn, embedding model baked in) + web (Next.js standalone)  ·  named volume  ·  GROQ_API_KEY via .env" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontStyle=2;fontSize=12;" vertex="1" parent="1"><mxGeometry x="40" y="920" width="1560" height="34" as="geometry"/></mxCell>
+
+        <!-- ============ EDGES ============ -->
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;" edge="1" parent="1" source="a_emp" target="fe_bg"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;" edge="1" parent="1" source="a_admin" target="fe_bg"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_agent" value="MCP tools" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;dashed=1;" edge="1" parent="1" source="a_agent" target="mcp"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e3" value="HTTPS + Bearer JWT" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;fontSize=10;" edge="1" parent="1" source="fe_bg" target="api_bg"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;" edge="1" parent="1" source="api_bg" target="core_bg"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_mcp_core" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;dashed=1;" edge="1" parent="1" source="mcp" target="core_bg"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e5" value="Cypher (read/write)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;fontSize=10;" edge="1" parent="1" source="core_bg" target="g_bg"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e6" value="extract · answer · embed" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;fontSize=10;" edge="1" parent="1" source="core_bg" target="ai_bg"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e7" value="fetch &amp; normalize" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;fontSize=10;" edge="1" parent="1" source="c3" target="src_bg"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -543,6 +543,19 @@ def eval_generate(req: DocRequest, authorization: str | None = Header(None)) -> 
     return res
 
 
+@app.post("/knowledge/check")
+def knowledge_check(req: DocRequest, authorization: str | None = Header(None)) -> dict:
+    """Publish-time knowledge check: impact + conflicts + affected eval cases -> verdict.
+
+    The eval harness acting as a publishing gate (Lore 2.0 Knowledge Change Management). Editor+.
+    """
+    cid, groups, _ = _require(authorization, "editor")
+    res = knowledge.knowledge_check(_db(), cid, req.doc_id, groups=groups)
+    if res is None:
+        raise HTTPException(status_code=404, detail="document not found")
+    return res
+
+
 @app.get("/search")
 def search(company_id: str, query: str, top_k: int = 8, authorization: str | None = Header(None)) -> list[dict]:
     cid, groups, _ = _identity(company_id, authorization)

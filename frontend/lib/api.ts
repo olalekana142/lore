@@ -305,6 +305,22 @@ export interface GeneratedQuestions {
   rejected: { question: string; why: string }[];
 }
 
+export interface KnowledgeCheck {
+  doc_id: string; title: string;
+  verdict: "clean" | "regressions";
+  impact: number;
+  impact_detail: { facts: number; related_docs: number; affected_questions: number; prior_versions: number };
+  conflicts: ConflictPair[]; conflict_count: number;
+  eval: { question: string; pass: boolean; answer: string }[];
+  regressions: number; eval_total: number;
+}
+export async function knowledgeCheck(companyId: string, docId: string): Promise<KnowledgeCheck> {
+  return j(await fetch(`${BASE}/knowledge/check`, {
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeader() },
+    body: JSON.stringify({ company_id: companyId, doc_id: docId }),
+  }));
+}
+
 export async function getImpact(companyId: string, docId: string): Promise<Impact> {
   return j(await fetch(`${BASE}/impact?${qs({ company_id: companyId, doc_id: docId })}`, { headers: authHeader() }));
 }

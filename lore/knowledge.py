@@ -166,6 +166,50 @@ def generate_questions(conn: kuzu.Connection, company_id: str, doc_id: str,
     return {"doc_id": doc_id, "title": doc["title"], "verified": verified, "rejected": rejected}
 
 
+# --------------------------------------------------------------- Knowledge Change Management
+def knowledge_check(conn: kuzu.Connection, company_id: str, doc_id: str,
+                    groups: list[str] | None = None) -> dict | None:
+    """Publish-time knowledge check: impact + conflicts + AFFECTED eval cases -> verdict.
+
+    Runs the golden eval cases that concern this document; a case that should pass but now
+    fails is a knowledge regression. This is the eval harness acting as a publishing gate.
+    """
+    from lore import eval as evalmod
+    from lore import health
+    from lore.retrieval.answer import retrieve, synthesize
+
+    impact = document_impact(conn, company_id, doc_id, groups)
+    if impact is None:
+        return None
+    conflicts = health.conflicts_for_docs(conn, company_id, [doc_id])
+
+    affected = [g for g in evalmod.GOLDEN
+                if not g.get("abstain") and not g.get("known_limitation") and doc_id in g.get("docs", [])]
+    results, regressions = [], 0
+    for g in affected:
+        r = retrieve(conn, company_id, g["q"], groups=g["groups"])
+        res = synthesize(g["q"], r)
+        text = res["answer"].lower()
+        cited = {s["doc_id"] for s in res["sources"]}
+        ok = (res["confidence"] != "none"
+              and all(h.lower() in text for h in g.get("has", []))
+              and bool(set(g["docs"]) & cited))
+        results.append({"question": g["q"], "pass": ok, "answer": res["answer"][:140]})
+        if not ok:
+            regressions += 1
+
+    verdict = "regressions" if (regressions or conflicts) else "clean"
+    return {
+        "doc_id": doc_id, "title": impact["title"], "verdict": verdict,
+        "impact": impact["total_impact"], "impact_detail": {
+            "facts": impact["facts"], "related_docs": len(impact["related_docs"]),
+            "affected_questions": impact["affected_questions"], "prior_versions": impact["prior_versions"],
+        },
+        "conflicts": conflicts, "conflict_count": len(conflicts),
+        "eval": results, "regressions": regressions, "eval_total": len(results),
+    }
+
+
 # --------------------------------------------------------------- helpers
 def _names(conn, cypher, params) -> list[str]:
     res = conn.execute(cypher, params)

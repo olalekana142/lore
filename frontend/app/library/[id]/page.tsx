@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
   getDocument, verifyDocument, setAudience,
-  getImpact, getHistory, getDiff, generateQuestions,
-  type DocDetail, type Impact, type History, type GeneratedQuestions,
+  getImpact, getHistory, getDiff, generateQuestions, knowledgeCheck, supersedeDocument,
+  type DocDetail, type Impact, type History, type GeneratedQuestions, type KnowledgeCheck,
 } from "@/lib/api";
 import { useCompany } from "@/lib/useCompany";
 import { useAuth, atLeast } from "@/lib/useAuth";
@@ -190,6 +190,114 @@ function GenerateQuestions({ companyId, docId }: { companyId: string; docId: str
   );
 }
 
+function KnowledgeCheckPanel({ companyId, docId }: { companyId: string; docId: string }) {
+  const [chk, setChk] = useState<KnowledgeCheck | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [retiring, setRetiring] = useState<string | null>(null);
+
+  async function run() {
+    setBusy(true);
+    try {
+      setChk(await knowledgeCheck(companyId, docId));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function retire(loser: string) {
+    setRetiring(loser);
+    try {
+      await supersedeDocument(companyId, loser);
+      await run();
+    } finally {
+      setRetiring(null);
+    }
+  }
+
+  const clean = chk?.verdict === "clean";
+  return (
+    <section className="mb-5">
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-sm font-semibold">
+          <span className="text-accent"><IconClock size={16} /></span> Knowledge check
+        </h2>
+        <button onClick={run} disabled={busy} className="btn-primary px-3 py-1.5 text-xs">
+          {busy ? "Checking…" : chk ? "Re-run check" : "Run knowledge check"}
+        </button>
+      </div>
+      <p className="mb-2 text-xs text-muted">
+        Before you rely on a change, Lore re-runs impact, conflict detection and the evaluation
+        cases this document governs — the eval harness acting as a publishing gate.
+      </p>
+      {chk && (
+        <div className="card p-4">
+          <div
+            className="mb-3 flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold"
+            style={{
+              background: clean ? "color-mix(in srgb, var(--green) 12%, transparent)" : "color-mix(in srgb, var(--amber) 14%, transparent)",
+              color: clean ? "var(--green)" : "var(--amber)",
+            }}
+          >
+            {clean
+              ? "✓ Ready — no conflicts, all governed evaluations pass"
+              : `⚠ Review needed — ${chk.regressions} regression(s), ${chk.conflict_count} conflict(s)`}
+          </div>
+
+          <div className="mb-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+            {[
+              ["Impact", chk.impact],
+              ["Facts", chk.impact_detail.facts],
+              ["Conflicts", chk.conflict_count],
+              ["Eval cases", chk.eval_total],
+            ].map(([k, v]) => (
+              <div key={k as string} className="rounded-lg bg-surface-2 p-2 text-center">
+                <div className="text-lg font-semibold text-fg">{v}</div>
+                <div className="text-muted">{k}</div>
+              </div>
+            ))}
+          </div>
+
+          {chk.eval.length > 0 && (
+            <div className="mb-3">
+              <div className="mb-1 text-xs font-medium text-muted">Governed evaluation cases</div>
+              <ul className="space-y-1">
+                {chk.eval.map((e, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm">
+                    <span style={{ color: e.pass ? "var(--green)" : "var(--amber)" }}>{e.pass ? "✓" : "✗"}</span>
+                    <span>
+                      {e.question}
+                      {!e.pass && <span className="ml-1 text-xs text-muted-dim">— now: “{e.answer}”</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {chk.conflicts.length > 0 && (
+            <div>
+              <div className="mb-1 text-xs font-medium text-muted">Conflicts introduced</div>
+              <ul className="space-y-2">
+                {chk.conflicts.map((c, i) => (
+                  <li key={i} className="rounded-lg bg-surface-2 p-2 text-xs">
+                    <div className="text-muted">{c.reason}</div>
+                    <div className="mt-1">“{c.a.statement}” <span className="text-muted-dim">({c.a.title})</span></div>
+                    <div>“{c.b.statement}” <span className="text-muted-dim">({c.b.title})</span></div>
+                    <div className="mt-1 flex gap-2">
+                      <button onClick={() => retire(c.b.doc_id)} disabled={retiring === c.b.doc_id} className="btn-ghost px-2 py-1 text-[11px]">
+                        {retiring === c.b.doc_id ? "Retiring…" : `Retire ${c.b.title}`}
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function VerifyBar({ doc, companyId, onDone }: { doc: DocDetail; companyId: string; onDone: () => void }) {
   const [owner, setOwner] = useState(doc.owner ?? "");
   const [busy, setBusy] = useState(false);
@@ -343,6 +451,7 @@ export default function DocumentPage() {
           </section>
 
           <HistoryTimeline companyId={companyId} docId={doc.doc_id} canEdit={canEdit} />
+          {canEdit && <KnowledgeCheckPanel companyId={companyId} docId={doc.doc_id} />}
           {canEdit && <ImpactBar companyId={companyId} docId={doc.doc_id} />}
           {canEdit && <GenerateQuestions companyId={companyId} docId={doc.doc_id} />}
 

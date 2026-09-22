@@ -288,6 +288,39 @@ export async function getAudit(companyId: string): Promise<Audit> {
   return j(await fetch(`${BASE}/audit?${qs({ company_id: companyId })}`, { headers: authHeader() }));
 }
 
+export interface Impact {
+  doc_id: string; title: string; facts: number; topics: string[];
+  related_docs: string[]; affected_questions: number;
+  affected_sample: { question: string; asked: number }[]; total_impact: number; prior_versions: number;
+}
+export interface DocVersion {
+  version: number; is_current: boolean;
+  effective_from: string | null; effective_to: string | null; updated_at: string | null; preview: string;
+}
+export interface History { doc_id: string; title: string; versions: DocVersion[]; }
+export interface Diff { doc_id: string; from_version: number; to_version: number; summary: string; }
+export interface GeneratedQuestions {
+  doc_id: string; title: string;
+  verified: { question: string; answer: string }[];
+  rejected: { question: string; why: string }[];
+}
+
+export async function getImpact(companyId: string, docId: string): Promise<Impact> {
+  return j(await fetch(`${BASE}/impact?${qs({ company_id: companyId, doc_id: docId })}`, { headers: authHeader() }));
+}
+export async function getHistory(companyId: string, docId: string): Promise<History> {
+  return j(await fetch(`${BASE}/history?${qs({ company_id: companyId, doc_id: docId })}`, { headers: authHeader() }));
+}
+export async function getDiff(companyId: string, docId: string, fromVersion: number): Promise<Diff> {
+  return j(await fetch(`${BASE}/diff?${qs({ company_id: companyId, doc_id: docId, from_version: fromVersion })}`, { headers: authHeader() }));
+}
+export async function generateQuestions(companyId: string, docId: string): Promise<GeneratedQuestions> {
+  return j(await fetch(`${BASE}/eval/generate`, {
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeader() },
+    body: JSON.stringify({ company_id: companyId, doc_id: docId }),
+  }));
+}
+
 export async function supersedeDocument(companyId: string, docId: string): Promise<void> {
   await fetch(`${BASE}/documents/supersede`, {
     method: "POST",

@@ -3,12 +3,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { getDocument, verifyDocument, setAudience, type DocDetail } from "@/lib/api";
+import {
+  getDocument, verifyDocument, setAudience,
+  getImpact, getHistory, getDiff, generateQuestions,
+  type DocDetail, type Impact, type History, type GeneratedQuestions,
+} from "@/lib/api";
 import { useCompany } from "@/lib/useCompany";
 import { useAuth, atLeast } from "@/lib/useAuth";
 import { relativeDate } from "@/lib/format";
 import { ErrorNote } from "../../components/ui";
-import { IconArrow, IconExternal, IconDoc } from "../../components/icons";
+import { IconArrow, IconExternal, IconDoc, IconClock, IconGap, IconSparkle } from "../../components/icons";
 
 /** Find the sentence in `text` that best matches `q` (token overlap); split around it. */
 function splitForHighlight(text: string, q: string | null): [string, string, string] | null {
@@ -67,6 +71,122 @@ function AudienceBar({ doc, companyId, onDone }: { doc: DocDetail; companyId: st
         )}
       </div>
     </div>
+  );
+}
+
+function HistoryTimeline({ companyId, docId, canEdit }: { companyId: string; docId: string; canEdit: boolean }) {
+  const [hist, setHist] = useState<History | null>(null);
+  const [diffs, setDiffs] = useState<Record<number, string>>({});
+  const [busy, setBusy] = useState<number | null>(null);
+
+  useEffect(() => {
+    getHistory(companyId, docId).then(setHist).catch(() => {});
+  }, [companyId, docId]);
+
+  if (!hist || hist.versions.length < 2) return null; // only interesting with history
+
+  async function whatChanged(fromVersion: number) {
+    setBusy(fromVersion);
+    try {
+      const d = await getDiff(companyId, docId, fromVersion);
+      setDiffs((prev) => ({ ...prev, [fromVersion]: d.summary }));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <section className="mb-5">
+      <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><span className="text-accent"><IconClock size={16} /></span> Version history</h2>
+      <div className="card p-4">
+        <ol className="relative space-y-4 border-l border-border pl-5">
+          {hist.versions.map((v) => (
+            <li key={v.version} className="relative">
+              <span className="absolute -left-[27px] top-1 h-3 w-3 rounded-full border-2 border-surface" style={{ background: v.is_current ? "var(--accent)" : "var(--muted-dim)" }} />
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <b>v{v.version}</b>
+                {v.is_current ? (
+                  <span className="chip" style={{ color: "var(--green)", borderColor: "var(--green)" }}>current</span>
+                ) : (
+                  <span className="chip">retired</span>
+                )}
+                <span className="text-xs text-muted-dim">{relativeDate(v.updated_at)}</span>
+                {!v.is_current && canEdit && !diffs[v.version] && (
+                  <button onClick={() => whatChanged(v.version)} disabled={busy === v.version} className="ml-auto text-xs font-medium text-accent hover:underline">
+                    {busy === v.version ? "…" : "What changed?"}
+                  </button>
+                )}
+              </div>
+              <div className="mt-1 text-xs text-muted">{v.preview}…</div>
+              {diffs[v.version] && (
+                <div className="mt-2 whitespace-pre-wrap rounded-lg border border-border bg-surface-2 p-2.5 text-xs">{diffs[v.version]}</div>
+              )}
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
+function ImpactBar({ companyId, docId }: { companyId: string; docId: string }) {
+  const [im, setIm] = useState<Impact | null>(null);
+  useEffect(() => {
+    getImpact(companyId, docId).then(setIm).catch(() => {});
+  }, [companyId, docId]);
+  if (!im) return null;
+  return (
+    <section className="mb-5">
+      <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold"><span className="text-accent"><IconGap size={16} /></span> Knowledge impact</h2>
+      <div className="card p-4 text-sm">
+        Editing or retiring this document could affect <b>{im.total_impact}</b> pieces of knowledge:{" "}
+        {im.facts} facts · {im.related_docs.length} related documents · {im.affected_questions} questions on its topics
+        {im.prior_versions > 0 && <> · {im.prior_versions} prior version(s)</>}.
+        {im.affected_sample.length > 0 && (
+          <ul className="mt-2 list-disc pl-5 text-xs text-muted">
+            {im.affected_sample.map((q, i) => <li key={i}>{q.question} <span className="text-muted-dim">({q.asked}×)</span></li>)}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function GenerateQuestions({ companyId, docId }: { companyId: string; docId: string }) {
+  const [gen, setGen] = useState<GeneratedQuestions | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function run() {
+    setBusy(true);
+    try {
+      setGen(await generateQuestions(companyId, docId));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="mb-5">
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-sm font-semibold"><span className="text-accent"><IconSparkle size={16} /></span> What can this document answer?</h2>
+        <button onClick={run} disabled={busy} className="btn-ghost px-3 py-1.5 text-xs">
+          {busy ? "Generating…" : gen ? "Regenerate" : "Generate & verify"}
+        </button>
+      </div>
+      {gen && (
+        <div className="card p-4">
+          <p className="mb-2 text-xs text-muted">{gen.verified.length} evidence-verified questions (grounded in this doc — ready to seed the eval set).</p>
+          <ul className="space-y-1.5">
+            {gen.verified.map((v, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm"><span style={{ color: "var(--green)" }}>✓</span>{v.question}</li>
+            ))}
+            {gen.rejected.map((r, i) => (
+              <li key={`r${i}`} className="flex items-start gap-2 text-sm text-muted-dim"><span style={{ color: "var(--amber)" }}>✗</span>{r.question}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -221,6 +341,10 @@ export default function DocumentPage() {
               <Link href="/connect" className="text-accent hover:underline">Add documents</Link> page to refresh them.
             </p>
           </section>
+
+          <HistoryTimeline companyId={companyId} docId={doc.doc_id} canEdit={canEdit} />
+          {canEdit && <ImpactBar companyId={companyId} docId={doc.doc_id} />}
+          {canEdit && <GenerateQuestions companyId={companyId} docId={doc.doc_id} />}
 
           <section>
             <h2 className="mb-2 text-sm font-semibold">Full text</h2>

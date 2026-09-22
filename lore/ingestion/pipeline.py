@@ -68,6 +68,28 @@ def store_document(conn: kuzu.Connection, doc: Document, seen_facts: dict[str, l
     the version is bumped and text/updated_at refreshed.
     """
     version = _next_version(conn, doc.id)
+
+    # Version history: before overwriting, archive the CURRENT state as a DocumentVersion
+    # (its window ends when this new version takes effect). Enables timeline + diff (#4).
+    prev = conn.execute(
+        "MATCH (d:Document {id:$id}) RETURN d.version, d.title, d.text, d.updated_at, d.effective_from",
+        {"id": doc.id},
+    )
+    if prev.has_next():
+        ov, ot, otext, oupd, oeff = prev.get_next()
+        vid = f"{doc.id}@v{ov or 1}"
+        conn.execute(
+            """MERGE (v:DocumentVersion {id:$vid})
+               SET v.doc_id=$id, v.version=$ver, v.title=$t, v.text=$text,
+                   v.updated_at=$u, v.effective_from=$ef, v.effective_to=$new""",
+            {"vid": vid, "id": doc.id, "ver": ov or 1, "t": ot, "text": otext,
+             "u": oupd, "ef": oeff, "new": doc.updated_at or datetime.now()},
+        )
+        conn.execute(
+            "MATCH (d:Document {id:$id}), (v:DocumentVersion {id:$vid}) MERGE (d)-[:HAS_VERSION]->(v)",
+            {"id": doc.id, "vid": vid},
+        )
+
     conn.execute(
         """MERGE (d:Document {id: $id})
            ON CREATE SET d.cited_count = 0, d.audience = ['everyone'],

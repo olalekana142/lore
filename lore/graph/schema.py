@@ -43,6 +43,11 @@ NODE_TABLES = [
     """CREATE NODE TABLE IF NOT EXISTS GlossaryTerm(
         id STRING, term STRING, definition STRING, PRIMARY KEY(id)
     )""",
+    """CREATE NODE TABLE IF NOT EXISTS DocumentVersion(
+        id STRING, doc_id STRING, version INT64, title STRING, text STRING,
+        updated_at TIMESTAMP, effective_from TIMESTAMP, effective_to TIMESTAMP,
+        PRIMARY KEY(id)
+    )""",
     """CREATE NODE TABLE IF NOT EXISTS Feedback(
         id STRING, company_id STRING, question STRING, answer STRING,
         rating STRING, note STRING, created_at TIMESTAMP, PRIMARY KEY(id)
@@ -71,6 +76,7 @@ REL_TABLES = [
     "CREATE REL TABLE IF NOT EXISTS ABOUT(FROM Document TO Topic)",
     "CREATE REL TABLE IF NOT EXISTS ASKED(FROM Company TO EmployeeQuestion)",
     "CREATE REL TABLE IF NOT EXISTS DEFINES(FROM Company TO GlossaryTerm)",
+    "CREATE REL TABLE IF NOT EXISTS HAS_VERSION(FROM Document TO DocumentVersion)",
     "CREATE REL TABLE IF NOT EXISTS CONNECTED_TO(FROM Topic TO Topic, weight DOUBLE)",
 ]
 

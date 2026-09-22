@@ -1,0 +1,180 @@
+"""Knowledge-graph features: impact analysis, version history/diff, self-expanding eval.
+
+These lean on the graph to do things flat RAG can't:
+  - impact:   "if this document changes, what else is affected?" (facts, related docs,
+              questions on its topics) — for editors before they edit/retire a doc.
+  - history:  a document's version timeline + an LLM "what changed" between versions.
+  - generate: from a document's evidence, propose questions it can answer, keep only the
+              ones whose answer is grounded + cites this doc — the seed of a self-growing
+              evaluation set (knowledge helps test the knowledge system).
+"""
+
+from __future__ import annotations
+
+import json
+
+import kuzu
+
+from lore.analytics import get_document
+from lore.config import settings
+from lore.llm import complete
+
+
+# --------------------------------------------------------------- #1 impact
+def document_impact(conn: kuzu.Connection, company_id: str, doc_id: str,
+                    groups: list[str] | None = None) -> dict | None:
+    doc = get_document(conn, company_id, doc_id, groups)
+    if doc is None:
+        return None
+    topics = doc["topics"]
+
+    related = _names(conn,
+        """MATCH (d:Document {id:$id})-[:ABOUT]->(t:Topic)<-[:ABOUT]-(o:Document)
+           WHERE o.id <> $id RETURN DISTINCT o.title""", {"id": doc_id})
+
+    affected_qs, aq_sample = 0, []
+    if topics:
+        res = conn.execute(
+            """MATCH (c:Company {id:$cid})-[:ASKED]->(q:EmployeeQuestion)
+               WHERE q.topic IN $topics
+               RETURN q.text, q.asked_count ORDER BY q.asked_count DESC""",
+            {"cid": company_id, "topics": topics},
+        )
+        while res.has_next():
+            text, cnt = res.get_next()
+            affected_qs += 1
+            if len(aq_sample) < 5:
+                aq_sample.append({"question": text, "asked": int(cnt or 1)})
+
+    versions = _scalar(conn, "MATCH (:Document {id:$id})-[:HAS_VERSION]->(v) RETURN count(v)", doc_id)
+    facts = len(doc["facts"])
+    return {
+        "doc_id": doc_id, "title": doc["title"],
+        "facts": facts, "topics": topics,
+        "related_docs": related, "affected_questions": affected_qs,
+        "affected_sample": aq_sample, "cited_count": doc.get("cited_count", 0),
+        "prior_versions": versions,
+        # a rough "pieces of knowledge touched" tally, all drillable
+        "total_impact": facts + len(related) + affected_qs,
+    }
+
+
+# --------------------------------------------------------------- #4 history / diff
+def document_history(conn: kuzu.Connection, company_id: str, doc_id: str,
+                     groups: list[str] | None = None) -> dict | None:
+    doc = get_document(conn, company_id, doc_id, groups)
+    if doc is None:
+        return None
+    res = conn.execute(
+        "MATCH (:Document {id:$id})-[:HAS_VERSION]->(v:DocumentVersion) "
+        "RETURN v.version, v.updated_at, v.effective_from, v.effective_to, v.text "
+        "ORDER BY v.version DESC", {"id": doc_id},
+    )
+    archived = []
+    while res.has_next():
+        ver, upd, ef, et, text = res.get_next()
+        archived.append({
+            "version": ver, "is_current": False,
+            "effective_from": ef.isoformat() if ef else None,
+            "effective_to": et.isoformat() if et else None,
+            "updated_at": upd.isoformat() if upd else None,
+            "preview": (text or "")[:180],
+        })
+    current = {
+        "version": doc["version"], "is_current": True,
+        "effective_from": None, "effective_to": None,
+        "updated_at": doc["updated_at"], "preview": doc["text"][:180],
+    }
+    return {"doc_id": doc_id, "title": doc["title"], "versions": [current] + archived}
+
+
+_DIFF_PROMPT = """Summarise what changed between two versions of a company document. Output
+2-5 short bullet points of concrete changes (numbers, rules, dates, eligibility). If a value
+changed, show "old → new". No preamble.
+
+OLD (v{fv}):
+\"\"\"{old}\"\"\"
+
+NEW (current):
+\"\"\"{new}\"\"\"
+"""
+
+
+def version_diff(conn: kuzu.Connection, company_id: str, doc_id: str, from_version: int,
+                 groups: list[str] | None = None) -> dict | None:
+    doc = get_document(conn, company_id, doc_id, groups)
+    if doc is None:
+        return None
+    res = conn.execute(
+        "MATCH (:Document {id:$id})-[:HAS_VERSION]->(v:DocumentVersion {version:$v}) RETURN v.text",
+        {"id": doc_id, "v": from_version},
+    )
+    if not res.has_next():
+        return None
+    old = res.get_next()[0]
+    summary = complete(
+        _DIFF_PROMPT.format(fv=from_version, old=old[:3000], new=doc["text"][:3000]),
+        model=settings.generation_model, max_tokens=400, temperature=0.1,
+    )
+    return {"doc_id": doc_id, "from_version": from_version, "to_version": doc["version"],
+            "summary": summary.strip()}
+
+
+# --------------------------------------------------------------- #5 self-expanding eval
+_GEN_PROMPT = """From the FACTS of one company document, write {k} distinct questions a
+worker would realistically ask that THIS document answers.
+
+Return ONLY JSON: {{"questions": ["question 1", "question 2", ...]}}
+
+DOCUMENT: {title}
+FACTS:
+{facts}
+"""
+
+
+def generate_questions(conn: kuzu.Connection, company_id: str, doc_id: str,
+                       groups: list[str] | None = None, k: int = 5) -> dict | None:
+    """Generate candidate questions, then keep only those whose answer is grounded and
+    cites THIS document — evidence-verified, ready to seed the golden eval set."""
+    from lore.retrieval.answer import retrieve, synthesize
+
+    doc = get_document(conn, company_id, doc_id, groups)
+    if doc is None:
+        return None
+    facts = "\n".join(f"- {s}" for s in doc["facts"]) or "(none)"
+    raw = complete(
+        _GEN_PROMPT.format(k=k, title=doc["title"], facts=facts),
+        model=settings.generation_model, max_tokens=400, temperature=0.4, json_mode=True,
+    )
+    try:
+        data = json.loads(raw[raw.find("{"): raw.rfind("}") + 1])
+        questions = data.get("questions", []) if isinstance(data, dict) else []
+    except (json.JSONDecodeError, ValueError):
+        questions = []
+
+    verified, rejected = [], []
+    for q in questions[:k]:
+        if not isinstance(q, str) or not q.strip():
+            continue
+        r = retrieve(conn, company_id, q, groups=groups)
+        res = synthesize(q, r)
+        cited = {s["doc_id"] for s in res["sources"]}
+        if res["confidence"] != "none" and doc_id in cited:
+            verified.append({"question": q, "answer": res["answer"]})
+        else:
+            rejected.append({"question": q, "why": "not grounded in this document"})
+    return {"doc_id": doc_id, "title": doc["title"], "verified": verified, "rejected": rejected}
+
+
+# --------------------------------------------------------------- helpers
+def _names(conn, cypher, params) -> list[str]:
+    res = conn.execute(cypher, params)
+    out = []
+    while res.has_next():
+        out.append(res.get_next()[0])
+    return out
+
+
+def _scalar(conn, cypher, doc_id) -> int:
+    res = conn.execute(cypher, {"id": doc_id})
+    return int(res.get_next()[0]) if res.has_next() else 0

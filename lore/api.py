@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from lore import actions, analytics, auth, escalations, feedback, glossary, health, onboarding
+from lore import actions, analytics, auth, escalations, feedback, glossary, health, knowledge, onboarding
 from lore.config import settings
 from lore.graph import queries
 from lore.graph.schema import get_connection, init_schema
@@ -95,6 +95,11 @@ class TextRequest(BaseModel):
 class QuestionRequest(BaseModel):
     company_id: str
     question: str
+
+
+class DocRequest(BaseModel):
+    company_id: str
+    doc_id: str
 
 
 class GlossaryRequest(BaseModel):
@@ -496,6 +501,46 @@ def document(doc_id: str, company_id: str, authorization: str | None = Header(No
     if doc is None:
         raise HTTPException(status_code=404, detail="document not found")
     return doc
+
+
+@app.get("/impact")
+def impact(company_id: str, doc_id: str, authorization: str | None = Header(None)) -> dict:
+    """Knowledge impact analysis: what else a document touches (#1). Editor+."""
+    cid, groups, _ = _require(authorization, "editor")
+    res = knowledge.document_impact(_db(), cid, doc_id, groups=groups)
+    if res is None:
+        raise HTTPException(status_code=404, detail="document not found")
+    return res
+
+
+@app.get("/history")
+def history(company_id: str, doc_id: str, authorization: str | None = Header(None)) -> dict:
+    """Document version timeline (#4)."""
+    cid, groups, _ = _identity(company_id, authorization)
+    res = knowledge.document_history(_db(), cid, doc_id, groups=groups)
+    if res is None:
+        raise HTTPException(status_code=404, detail="document not found")
+    return res
+
+
+@app.get("/diff")
+def diff(company_id: str, doc_id: str, from_version: int, authorization: str | None = Header(None)) -> dict:
+    """LLM 'what changed' between an old version and the current one (#4). Editor+."""
+    cid, groups, _ = _require(authorization, "editor")
+    res = knowledge.version_diff(_db(), cid, doc_id, from_version, groups=groups)
+    if res is None:
+        raise HTTPException(status_code=404, detail="version not found")
+    return res
+
+
+@app.post("/eval/generate")
+def eval_generate(req: DocRequest, authorization: str | None = Header(None)) -> dict:
+    """Generate evidence-verified questions a document can answer (#5, self-expanding eval). Editor+."""
+    cid, groups, _ = _require(authorization, "editor")
+    res = knowledge.generate_questions(_db(), cid, req.doc_id, groups=groups)
+    if res is None:
+        raise HTTPException(status_code=404, detail="document not found")
+    return res
 
 
 @app.get("/search")

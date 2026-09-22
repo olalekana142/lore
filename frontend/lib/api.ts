@@ -27,6 +27,10 @@ export interface Source {
   version: number;
   owner: string | null;
   verified: boolean;
+  current: boolean;
+  authority: number;
+  effective_from: string | null;
+  effective_to: string | null;
   facts: string[];
 }
 

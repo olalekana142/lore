@@ -8,7 +8,8 @@ import {
 import { useCompany } from "@/lib/useCompany";
 import AnswerText from "../components/AnswerText";
 import { ConfidenceBadge, SourceCard } from "../components/ui";
-import { IconSend, IconThumbUp, IconThumbDown, IconChat, IconGap, IconZap } from "../components/icons";
+import { IconSend, IconThumbUp, IconThumbDown, IconChat, IconGap, IconZap, IconInfo, IconShieldCheck } from "../components/icons";
+import { relativeDate } from "@/lib/format";
 
 interface Msg {
   role: "user" | "assistant";
@@ -172,10 +173,54 @@ export default function AskPage() {
   );
 }
 
+function authorityTier(a: number): string {
+  if (a >= 90) return "Official policy";
+  if (a >= 80) return "Approved source";
+  if (a >= 60) return "Standard document";
+  return "Low authority";
+}
+
+function WhyPanel({ sources }: { sources: Source[] }) {
+  const allCurrent = sources.every((s) => s.current);
+  const verified = sources.filter((s) => s.verified).length;
+  const owners = Array.from(new Set(sources.map((s) => s.owner).filter(Boolean)));
+  const maxAuth = Math.max(...sources.map((s) => s.authority ?? 60));
+  const freshest = sources.map((s) => s.updated_at).filter(Boolean).sort().reverse()[0] as string | undefined;
+
+  const Row = ({ ok, children }: { ok: boolean; children: React.ReactNode }) => (
+    <li className="flex items-center gap-2 text-sm">
+      <span style={{ color: ok ? "var(--green)" : "var(--amber)" }}>{ok ? "✓" : "⚠"}</span>
+      {children}
+    </li>
+  );
+
+  return (
+    <div className="animate-scale-in mt-3 rounded-xl border border-border bg-surface-2 p-4">
+      <div className="mb-2.5 flex items-center gap-2 text-sm font-semibold">
+        <span className="text-accent"><IconShieldCheck size={16} /></span> Why this answer
+      </div>
+      <ul className="space-y-1.5">
+        <Row ok={allCurrent}>{allCurrent ? "Current version — no retired sources used" : "Includes a source that isn't current"}</Row>
+        <Row ok={verified === sources.length}>
+          {verified === sources.length ? "Verified" : `${verified} of ${sources.length} sources verified`}
+          {owners.length > 0 && <span className="text-muted"> · owned by {owners.join(", ")}</span>}
+        </Row>
+        <Row ok={sources.length >= 1}>{sources.length === 1 ? "1 source" : `${sources.length} independent sources`} cited</Row>
+        <Row ok={maxAuth >= 60}>Highest authority: <b className="font-semibold">{authorityTier(maxAuth)}</b></Row>
+        {freshest && <Row ok={true}>Freshest source updated {relativeDate(freshest)}</Row>}
+      </ul>
+      <p className="mt-2.5 border-t border-border-soft pt-2.5 text-xs text-muted-dim">
+        Every claim is grounded in the documents below — click a fact to see the exact sentence in its source.
+      </p>
+    </div>
+  );
+}
+
 function AssistantBubble({ msg, companyId, question }: { msg: Msg; companyId: string; question: string }) {
   const [cite, setCite] = useState<number | null>(null);
   const [rated, setRated] = useState<"up" | "down" | null>(null);
   const [escalated, setEscalated] = useState(false);
+  const [why, setWhy] = useState(false);
   const [action, setAction] = useState<ActionSuggestion | null>(null);
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [filing, setFiling] = useState(false);
@@ -242,8 +287,18 @@ function AssistantBubble({ msg, companyId, question }: { msg: Msg; companyId: st
               <IconThumbDown size={15} />
             </button>
             {rated && <span className="ml-1 text-xs text-muted-dim">Thanks for the feedback</span>}
+            {msg.sources && msg.sources.length > 0 && (
+              <button
+                onClick={() => setWhy((w) => !w)}
+                className={`ml-auto inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors ${why ? "text-accent" : "text-muted-dim hover:text-foreground"}`}
+              >
+                <IconInfo size={14} /> Why this answer?
+              </button>
+            )}
           </div>
         )}
+
+        {why && msg.sources && msg.sources.length > 0 && <WhyPanel sources={msg.sources} />}
 
         {action?.actionable && (
           <div className="mt-3 rounded-lg border p-3" style={{ borderColor: "var(--accent)", background: "var(--accent-weak)" }}>

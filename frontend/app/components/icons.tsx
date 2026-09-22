@@ -119,6 +119,18 @@ export const IconUsers = (p: { size?: number }) => (
     <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13A4 4 0 0 1 16 11" />
   </Svg>
 );
+export const IconInfo = (p: { size?: number }) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 16v-4M12 8h.01" />
+  </Svg>
+);
+export const IconShieldCheck = (p: { size?: number }) => (
+  <Svg {...p}>
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+    <path d="m9 12 2 2 4-4" />
+  </Svg>
+);
 export const IconHealth = (p: { size?: number }) => (
   <Svg {...p}>
     <path d="M20.8 5.6a5.5 5.5 0 0 0-7.8 0L12 6.6l-1-1a5.5 5.5 0 0 0-7.8 7.8L12 22l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z" />

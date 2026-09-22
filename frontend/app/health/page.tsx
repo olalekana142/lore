@@ -6,9 +6,11 @@ import {
   getContentHealth,
   getGlossary,
   addGlossaryTerm,
+  getAudit,
   type ContentHealth,
   type HealthPair,
   type GlossaryTerm,
+  type Audit,
 } from "@/lib/api";
 import { useCompany } from "@/lib/useCompany";
 import { relativeDate } from "@/lib/format";
@@ -18,13 +20,16 @@ import { IconAlert, IconCopy, IconClock, IconBook } from "../components/icons";
 export default function HealthPage() {
   const [companyId, , ready] = useCompany();
   const [data, setData] = useState<ContentHealth | null>(null);
+  const [audit, setAudit] = useState<Audit | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
     setData(null);
+    setAudit(null);
     try {
-      setData(await getContentHealth(companyId));
+      setAudit(await getAudit(companyId)); // fast scorecard first
+      setData(await getContentHealth(companyId)); // slower conflict scan
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
     }
@@ -42,6 +47,8 @@ export default function HealthPage() {
       />
 
       {error && <ErrorNote message={error} />}
+
+      {audit && <AuditScorecard audit={audit} conflicts={data?.conflicts.length} />}
 
       {!data && !error && (
         <div className="card p-8 text-center text-sm text-muted">
@@ -107,6 +114,60 @@ export default function HealthPage() {
           </Section>
 
           <GlossaryManager companyId={companyId} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AuditScorecard({ audit, conflicts }: { audit: Audit; conflicts?: number }) {
+  const bars: [string, number][] = [
+    ["Freshness", audit.scores.freshness],
+    ["Verification", audit.scores.verification],
+    ["Ownership", audit.scores.ownership],
+    ["Citation coverage", audit.scores.citation_coverage],
+  ];
+  const barColor = (v: number) => (v >= 75 ? "var(--green)" : v >= 40 ? "var(--amber)" : "var(--red)");
+  const actions = ([
+    [conflicts ?? 0, "unresolved conflicts", "var(--red)"],
+    [audit.unverified, "unverified documents", "var(--amber)"],
+    [audit.missing_owner, "documents without an owner", "var(--amber)"],
+    [audit.stale, "stale documents", "var(--amber)"],
+    [audit.superseded, "superseded documents", "var(--muted)"],
+    [audit.never_cited, "never cited (possible dead weight)", "var(--muted)"],
+    [audit.gaps, "unanswered popular questions", "var(--amber)"],
+  ] as [number, string, string][]).filter(([n]) => n > 0);
+
+  return (
+    <div className="animate-fade-up mb-8 card p-5">
+      <h2 className="mb-1 text-base font-bold">Knowledge audit</h2>
+      <p className="mb-4 text-xs text-muted">
+        {audit.documents} documents scanned · every metric is a real, drillable count — no arbitrary AI score.
+      </p>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {bars.map(([label, v]) => (
+          <div key={label}>
+            <div className="mb-1 flex items-center justify-between text-sm">
+              <span>{label}</span>
+              <span className="font-bold" style={{ color: barColor(v) }}>{v}</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-surface-2">
+              <div className="h-full rounded-full transition-all" style={{ width: `${v}%`, background: barColor(v) }} />
+            </div>
+          </div>
+        ))}
+      </div>
+      {actions.length > 0 && (
+        <div className="mt-4 border-t border-border-soft pt-3">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-dim">Action required</div>
+          <div className="flex flex-wrap gap-2">
+            {actions.map(([n, label, color]) => (
+              <span key={label} className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs"
+                style={{ borderColor: color, color, background: `color-mix(in srgb, ${color} 10%, transparent)` }}>
+                <b>{n}</b> {label}
+              </span>
+            ))}
+          </div>
         </div>
       )}
     </div>

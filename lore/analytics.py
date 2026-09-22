@@ -237,6 +237,50 @@ def draft_answer(company_id: str, question: str) -> dict:
     }
 
 
+def audit(conn: kuzu.Connection, company_id: str, groups: list[str] | None = None) -> dict:
+    """One-click knowledge audit — organizational knowledge quality, all explainable.
+
+    Aggregates the signals we already track (freshness, verification, ownership, citation
+    coverage, gaps, superseded/restricted docs). Fast — no LLM; conflict/duplicate counts
+    come from the separate content-health scan. Every number here is a real, drillable count.
+    """
+    docs = list_documents(conn, company_id, groups)
+    n = len(docs) or 1
+    verified = sum(1 for d in docs if d["verified"])
+    owned = sum(1 for d in docs if d["owner"])
+    restricted = sum(1 for d in docs if d["audience"] and "everyone" not in d["audience"])
+    stale = len(find_stale_docs(conn, company_id))
+    never = len(never_cited_docs(conn, company_id))
+    gaps = len(knowledge_gaps(conn, company_id, limit=1000))
+    cited = _scalar(
+        conn,
+        "MATCH (c:Company {id:$cid})-[:OWNS]->(d:Document) WHERE coalesce(d.cited_count,0) > 0 "
+        "RETURN count(d)", company_id,
+    )
+    res = conn.execute(
+        "MATCH (c:Company {id:$cid})-[:OWNS]->(d:Document) "
+        "WHERE d.effective_to IS NOT NULL AND d.effective_to < $now RETURN count(d)",
+        {"cid": company_id, "now": datetime.now()},
+    )
+    superseded = int(res.get_next()[0]) if res.has_next() else 0
+
+    docs_total = len(docs)
+    return {
+        "documents": docs_total,
+        "verified": verified, "unverified": docs_total - verified,
+        "missing_owner": docs_total - owned,
+        "restricted": restricted, "superseded": superseded,
+        "stale": stale, "never_cited": never, "gaps": gaps,
+        # explainable component scores (0-100), not one mystery number
+        "scores": {
+            "freshness": round(100 * (docs_total - stale) / n),
+            "verification": round(100 * verified / n),
+            "ownership": round(100 * owned / n),
+            "citation_coverage": round(100 * cited / n),
+        },
+    }
+
+
 def home(conn: kuzu.Connection, company_id: str, groups: list[str] | None = None) -> dict:
     """Employee-facing home data: what's new + popular, scoped to what they can see.
 

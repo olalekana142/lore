@@ -261,6 +261,23 @@ export async function getContentHealth(companyId: string): Promise<ContentHealth
   return j(await fetch(`${BASE}/content-health?${qs({ company_id: companyId })}`, { headers: authHeader() }));
 }
 
+export interface Audit {
+  documents: number;
+  verified: number;
+  unverified: number;
+  missing_owner: number;
+  restricted: number;
+  superseded: number;
+  stale: number;
+  never_cited: number;
+  gaps: number;
+  scores: { freshness: number; verification: number; ownership: number; citation_coverage: number };
+}
+
+export async function getAudit(companyId: string): Promise<Audit> {
+  return j(await fetch(`${BASE}/audit?${qs({ company_id: companyId })}`, { headers: authHeader() }));
+}
+
 // --- auth ---
 export interface AuthUser {
   username: string;

@@ -383,6 +383,13 @@ def ingest_text_doc(req: TextRequest, authorization: str | None = Header(None)) 
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@app.get("/audit")
+def audit(company_id: str, authorization: str | None = Header(None)) -> dict:
+    """Knowledge-quality scorecard (editor+). Fast; conflict counts come from /content-health."""
+    cid, groups, _ = _require(authorization, "editor")
+    return analytics.audit(_db(), cid, groups=groups)
+
+
 @app.get("/content-health")
 def content_health(company_id: str, authorization: str | None = Header(None)) -> dict:
     """Conflicts + duplicates across docs, plus never-cited and stale docs."""

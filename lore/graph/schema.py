@@ -27,6 +27,7 @@ NODE_TABLES = [
         id STRING, title STRING, source STRING, url STRING,
         text STRING, version INT64, updated_at TIMESTAMP,
         owner STRING, verified_at TIMESTAMP, audience STRING[],
+        effective_from TIMESTAMP, effective_to TIMESTAMP, authority INT64,
         cited_count INT64, last_cited TIMESTAMP, PRIMARY KEY(id)
     )""",
     """CREATE NODE TABLE IF NOT EXISTS User(

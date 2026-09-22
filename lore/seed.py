@@ -69,6 +69,18 @@ def main() -> None:
         analytics.verify_document(conn, doc_id, owner)
     print("[seed] verified 2 docs")
 
+    # Temporal + authority: the legacy FAQ (20 PTO days) was superseded when the PTO policy
+    # updated to 25 (effective 2026-08). Authority: verified HR policy > legacy unverified.
+    from datetime import datetime
+    conn.execute(
+        "MATCH (d:Document {id:'upload:employee-faq'}) SET d.effective_to=$t, d.authority=30",
+        {"t": datetime(2026, 7, 31)},
+    )
+    for doc_id, auth in [("upload:pto-policy", 95), ("upload:security-incident", 90),
+                         ("manual:compensation-bands-2026", 85)]:
+        conn.execute("MATCH (d:Document {id:$id}) SET d.authority=$a", {"id": doc_id, "a": auth})
+    print("[seed] temporal: FAQ superseded (2026-07-31); authorities set")
+
     # Permissions demo: an HR-only document + a few users in different groups.
     from lore import auth
     comp = ingest_text(

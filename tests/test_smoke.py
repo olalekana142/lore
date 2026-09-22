@@ -169,6 +169,21 @@ def test_rrf_rewards_agreement_and_weights():
     assert max(fused_w, key=fused_w.get) == 0
 
 
+def test_temporal_parse_and_effective_window():
+    from datetime import datetime
+    from lore.retrieval.temporal import parse_as_of, effective_at, is_superseded
+
+    assert parse_as_of("What is the current PTO policy?") is None            # current
+    assert parse_as_of("What was PTO in 2025?").year == 2025                  # explicit year
+    assert parse_as_of("before the 2026 change").year == 2025                 # before -> year-1
+    now = datetime(2026, 9, 1)
+    ef, et = datetime(2024, 1, 1), datetime(2025, 12, 31)
+    assert effective_at(ef, et, datetime(2025, 6, 1))                         # in window
+    assert not effective_at(ef, et, now)                                     # after window
+    assert is_superseded(et, now)                                            # ended before now
+    assert not is_superseded(None, now)                                      # open-ended = current
+
+
 def test_embed_is_deterministic_and_normalized():
     a, b = embed_text("how many PTO days do I get"), embed_text("how many PTO days do I get")
     assert cosine(a, b) > 0.999  # identical text -> identical vector

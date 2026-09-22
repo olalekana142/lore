@@ -55,8 +55,13 @@ GOLDEN: list[dict] = [
     {"q": "There's a home office stipend — does the company pay my full home rent?", "docs": ["upload:remote-work"], "refute": True, "groups": PUBLIC, "adversarial": "inference"},
     {"q": "Since sick leave exists, can I take unlimited sick days?", "docs": ["upload:sick-leave"], "refute": True, "groups": PUBLIC, "adversarial": "inference"},
     {"q": "Since there is parental leave, is it fully paid for a whole year?", "docs": ["upload:acme-parental-leave"], "refute": True, "groups": PUBLIC, "adversarial": "inference"},
-    # --- temporal: KNOWN LIMITATION until the version/effective-date model lands (expected to fail now) ---
-    {"q": "What was the PTO entitlement before the 2026 change?", "docs": ["upload:employee-faq"], "has": ["20"], "groups": PUBLIC, "known_limitation": "temporal"},
+    # --- temporal: current-vs-superseded is shipped & gated; a "current" question must not
+    #     return the retired policy ---
+    {"q": "What is the current PTO entitlement?", "docs": ["upload:pto-policy"], "has": ["25"], "groups": PUBLIC, "temporal": "current"},
+    # historical as-of routing works (keeps the effective doc, drops the 2026 one) but the
+    # answer still needs the version-chain model + vacation/PTO synonymy — tracked, NOT gated.
+    {"q": "What was the PTO entitlement in 2025?", "docs": ["upload:employee-faq"], "has": ["20"], "groups": PUBLIC, "known_limitation": "temporal-historical"},
+    {"q": "What was the PTO entitlement before the 2026 change?", "docs": ["upload:employee-faq"], "has": ["20"], "groups": PUBLIC, "known_limitation": "temporal-historical"},
     # --- abstain: restricted to 'hr' — a public user must NOT get an answer ---
     {"q": "What do Level 5 engineers earn?", "docs": [], "groups": PUBLIC, "abstain": True, "adversarial": "acl"},
     # --- abstain: genuinely not documented ---

@@ -22,6 +22,7 @@ from lore.config import settings
 from lore.ingestion.embed import cosine, embed_text
 from lore.llm import complete
 from lore.retrieval.hybrid import bm25_scores, rank_indices, rrf, tokenize
+from lore.retrieval.temporal import effective_at, is_superseded, parse_as_of
 
 _SYSTEM_PROMPT = """You are the company's internal knowledge assistant. Answer each
 question using ONLY the numbered facts provided with that question. Each fact is tagged
@@ -36,7 +37,9 @@ Rules:
 
 def retrieve(conn: kuzu.Connection, company_id: str, question: str,
              top_k: int | None = None, groups: list[str] | None = None,
-             hybrid: bool = True) -> dict:
+             hybrid: bool = False) -> dict:
+    # NOTE: hybrid defaults OFF — on this corpus the eval shows dense ≥ hybrid (hybrid has
+    # never won and sometimes regresses MRR). Kept behind the flag to re-evaluate at scale.
     """Return the top facts for a question plus numbered source documents.
 
     Result: {query_vec, facts[], sources[], confidence, top_similarity, glossary[]}. Each
@@ -54,47 +57,71 @@ def retrieve(conn: kuzu.Connection, company_id: str, question: str,
         """MATCH (c:Company {id:$cid})-[:OWNS]->(d:Document)-[:STATES]->(f:Fact)
            RETURN f.id, f.statement, f.embedding,
                   d.id, d.title, d.url, d.updated_at, d.version, d.owner, d.verified_at,
-                  d.audience""",
+                  d.audience, d.effective_from, d.effective_to, d.authority""",
         {"cid": company_id},
     )
-    verify_cutoff = datetime.now() - timedelta(days=settings.review_days)
+    now = datetime.now()
+    verify_cutoff = now - timedelta(days=settings.review_days)
     # Candidate pool = every fact the caller may see (ACL applied BEFORE ranking, so the
     # model never sees unauthorized content). No relevance pre-filter here — a low dense
     # score but exact lexical match (e.g. "4357", "$60") should still be a candidate.
     cand: list[dict] = []
     while res.has_next():
-        fid, statement, emb, did, title, url, updated_at, version, owner, verified_at, audience = res.get_next()
+        (fid, statement, emb, did, title, url, updated_at, version, owner, verified_at,
+         audience, eff_from, eff_to, authority) = res.get_next()
         if not emb or not can_see(audience, groups):
             continue
-        sim = cosine(query_vec, emb)
         cand.append(
             {
-                "fact_id": fid, "statement": statement, "similarity": round(sim, 4),
-                "_dense": sim,
+                "fact_id": fid, "statement": statement, "similarity": round(cosine(query_vec, emb), 4),
+                "_dense": cosine(query_vec, emb),
                 "doc_id": did, "title": title, "url": url,
                 "updated_at": updated_at.isoformat() if updated_at else None,
-                "version": version,
-                "owner": owner or None,
+                "version": version, "owner": owner or None,
                 "verified": bool(verified_at and verified_at >= verify_cutoff),
+                "_eff_from": eff_from, "_eff_to": eff_to, "_authority": authority or 60,
+                "current": not is_superseded(eff_to, now),
+                "authority": authority or 60,
+                "effective_from": eff_from.isoformat() if eff_from else None,
+                "effective_to": eff_to.isoformat() if eff_to else None,
             }
         )
 
+    # --- temporal: for a historical question ("in 2025", "before the 2026 change"), keep
+    #     only documents in force at that time; current questions keep all but demote
+    #     superseded docs below. Components stay observable (current / authority). ---
+    as_of = parse_as_of(question)
+    if as_of is not None:
+        eff = [c for c in cand if effective_at(c["_eff_from"], c["_eff_to"], as_of)]
+        if eff:
+            cand = eff
+
     bm: list[float] = []
     if hybrid and cand:
-        # Fuse dense + lexical rankings via Reciprocal Rank Fusion.
         bm = bm25_scores(expanded["query"], [tokenize(c["statement"]) for c in cand])
-        fused = rrf(
+        base = rrf(
             [rank_indices([c["_dense"] for c in cand]), rank_indices(bm)],
             weights=[1.0, settings.bm25_weight],  # dense primary, lexical booster
         )
-        order = sorted(range(len(cand)), key=lambda i: fused.get(i, 0.0), reverse=True)
     else:
-        order = rank_indices([c["_dense"] for c in cand])
+        dr = rank_indices([c["_dense"] for c in cand])
+        base = {idx: 1.0 / (rank + 1) for rank, idx in enumerate(dr)}
 
-    # Keep the top-K, dropping pure noise (weak dense AND no lexical hit).
+    # authority + currentness re-rank (superseded docs demoted for current questions)
+    scores: dict[int, float] = {}
+    for i, c in enumerate(cand):
+        c["_superseded"] = as_of is None and is_superseded(c["_eff_to"], now)
+        factor = (0.25 if c["_superseded"] else 1.0) * (1 + c["_authority"] / 1000.0)
+        scores[i] = base.get(i, 0.0) * factor
+    order = sorted(range(len(cand)), key=lambda i: scores.get(i, 0.0), reverse=True)
+
+    # Keep the top-K, dropping pure noise (weak dense AND no lexical hit) and — for a
+    # CURRENT question — any superseded document (its facts are no longer in force).
     facts: list[dict] = []
     for i in order:
         c = cand[i]
+        if c["_superseded"]:
+            continue
         if c["_dense"] >= settings.min_relevance or (bm and bm[i] > 0):
             facts.append(c)
         if len(facts) >= top_k:
@@ -111,6 +138,8 @@ def retrieve(conn: kuzu.Connection, company_id: str, question: str,
                     "n": len(sources) + 1, "doc_id": f["doc_id"], "title": f["title"],
                     "url": f["url"] or None, "updated_at": f["updated_at"],
                     "version": f["version"], "owner": f["owner"], "verified": f["verified"],
+                    "current": f["current"], "authority": f["authority"],
+                    "effective_from": f["effective_from"], "effective_to": f["effective_to"],
                     "facts": [],
                 }
             )

@@ -59,16 +59,17 @@ def extract(title: str, text: str, id_prefix: str) -> ExtractionResult:
         if data.get("facts"):
             break
 
-    facts = [
-        Fact(id=f"{id_prefix}:fact:{n}", statement=f["statement"].strip())
-        for n, f in enumerate(data.get("facts", []))
-        if f.get("statement")
-    ]
-    topics = [
-        Topic(id=f"topic:{t['name'].lower().strip()}", name=t["name"].strip())
-        for t in data.get("topics", [])
-        if t.get("name")
-    ]
+    # The model USUALLY returns [{"statement": ...}] but sometimes bare strings — accept both.
+    facts = []
+    for n, item in enumerate(data.get("facts", [])):
+        stmt = item.get("statement") if isinstance(item, dict) else item if isinstance(item, str) else None
+        if stmt and stmt.strip():
+            facts.append(Fact(id=f"{id_prefix}:fact:{n}", statement=stmt.strip()))
+    topics = []
+    for item in data.get("topics", []):
+        name = item.get("name") if isinstance(item, dict) else item if isinstance(item, str) else None
+        if name and name.strip():
+            topics.append(Topic(id=f"topic:{name.lower().strip()}", name=name.strip()))
     return ExtractionResult(facts=facts, topics=topics)
 
 

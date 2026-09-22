@@ -27,6 +27,9 @@ COMPANY = "acme"
 PUBLIC = ["everyone"]
 HR = ["hr"]
 
+# For "refute" adversarial cases: a correct answer qualifies/denies the over-claim.
+_REFUTE_CUES = ["not ", "n't", " only", "require", "approval", "must ", "may ", "up to", "cannot", " no "]
+
 # question · expected doc_ids · answer must contain · must NOT contain · groups · flags
 GOLDEN: list[dict] = [
     {"q": "How many PTO days do full-time employees get?", "docs": ["upload:pto-policy"], "has": ["25"], "groups": PUBLIC},
@@ -43,8 +46,17 @@ GOLDEN: list[dict] = [
     {"q": "What is the home office stipend?", "docs": ["upload:remote-work"], "has": ["500"], "groups": PUBLIC},
     # --- adversarial: conflict / number-trap (FAQ says 20, current policy says 25) ---
     {"q": "How many PTO days are available?", "docs": ["upload:pto-policy"], "has": ["25"], "groups": PUBLIC, "adversarial": "conflict"},
-    # --- adversarial: unsupported inference (source: managers MAY approve) ---
-    {"q": "Since managers can approve remote work, is remote work guaranteed for every employee?", "docs": ["upload:remote-work"], "not": ["guaranteed for every", "all employees are guaranteed"], "groups": PUBLIC, "adversarial": "inference"},
+    # --- adversarial: unsupported inference. "refute" = a correct answer must QUALIFY/deny
+    #     the over-generalisation (checked by a refutation cue, avoiding negation-substring
+    #     traps like flagging "NOT guaranteed for everyone" as if it asserted it) ---
+    {"q": "Since managers can approve remote work, is remote work guaranteed for every employee?", "docs": ["upload:remote-work"], "refute": True, "groups": PUBLIC, "adversarial": "inference"},
+    {"q": "The company has a 401k match — does everyone get it automatically from day one?", "docs": ["upload:benefits"], "refute": True, "groups": PUBLIC, "adversarial": "inference"},
+    {"q": "I can carry over PTO — does that mean I can carry over unlimited days?", "docs": ["upload:pto-policy"], "refute": True, "groups": PUBLIC, "adversarial": "inference"},
+    {"q": "There's a home office stipend — does the company pay my full home rent?", "docs": ["upload:remote-work"], "refute": True, "groups": PUBLIC, "adversarial": "inference"},
+    {"q": "Since sick leave exists, can I take unlimited sick days?", "docs": ["upload:sick-leave"], "refute": True, "groups": PUBLIC, "adversarial": "inference"},
+    {"q": "Since there is parental leave, is it fully paid for a whole year?", "docs": ["upload:acme-parental-leave"], "refute": True, "groups": PUBLIC, "adversarial": "inference"},
+    # --- temporal: KNOWN LIMITATION until the version/effective-date model lands (expected to fail now) ---
+    {"q": "What was the PTO entitlement before the 2026 change?", "docs": ["upload:employee-faq"], "has": ["20"], "groups": PUBLIC, "known_limitation": "temporal"},
     # --- abstain: restricted to 'hr' — a public user must NOT get an answer ---
     {"q": "What do Level 5 engineers earn?", "docs": [], "groups": PUBLIC, "abstain": True, "adversarial": "acl"},
     # --- abstain: genuinely not documented ---
@@ -101,16 +113,31 @@ def _classify_miss(g, r, res) -> str:
     return "generation (evidence retrieved, answer wrong)"
 
 
-def answer_eval(conn) -> dict:
+def answer_eval(conn, verify: bool = False) -> dict:
     tp = ta = fa_answer = fa_abstain = 0          # abstention 2x2
     n_ans = n_abs = 0
     cite_prec_ok = 0
+    lat: list[float] = []
     fails = []
+    known = {"pass": 0, "total": 0}               # tracked, NOT gated
     for g in GOLDEN:
         r = retrieve(conn, COMPANY, g["q"], groups=g["groups"])
-        res = synthesize(g["q"], r)
+        t0 = time.perf_counter()
+        res = synthesize(g["q"], r, verify=verify)
+        lat.append((time.perf_counter() - t0) * 1000)
         text = res["answer"].lower()
         cited = {s["doc_id"] for s in res["sources"]}
+        has_ok = all(h.lower() in text for h in g.get("has", []))
+        if g.get("refute"):
+            not_ok = any(cue in text for cue in _REFUTE_CUES)  # answer qualifies the over-claim
+        else:
+            not_ok = all(n.lower() not in text for n in g.get("not", []))
+        cite_ok = bool(set(g["docs"]) & cited)
+
+        if g.get("known_limitation"):
+            known["total"] += 1
+            known["pass"] += int(has_ok and cite_ok)
+            continue
         if g.get("abstain"):
             n_abs += 1
             if res["confidence"] == "none":
@@ -120,25 +147,24 @@ def answer_eval(conn) -> dict:
                 fails.append((g["q"], f"FALSE ANSWER on unanswerable ({g.get('adversarial','')})"))
         else:
             n_ans += 1
-            has_ok = all(h.lower() in text for h in g.get("has", []))
-            not_ok = all(n.lower() not in text for n in g.get("not", []))
-            cite_ok = bool(set(g["docs"]) & cited)
             if res["confidence"] == "none":
                 fa_abstain += 1
-                fails.append((g["q"], "FALSE ABSTENTION (was answerable)"))
+                fails.append((g["q"], "FALSE ABSTENTION (was answerable — verifier over-rejected?)"))
             elif has_ok and not_ok and cite_ok:
                 tp += 1
                 cite_prec_ok += 1
             else:
                 fails.append((g["q"], _classify_miss(g, r, res)))
                 if cite_ok:
-                    cite_prec_ok += 1  # cited correctly even if answer text imperfect
+                    cite_prec_ok += 1
+    lat.sort()
     return {
-        "n_ans": n_ans, "n_abs": n_abs,
+        "n_ans": n_ans, "n_abs": n_abs, "correct": tp,
         "answer_acc": tp / n_ans if n_ans else 0,
         "abstain_acc": ta / n_abs if n_abs else 0,
         "false_answers": fa_answer, "false_abstentions": fa_abstain,
         "citation_precision": cite_prec_ok / n_ans if n_ans else 0,
+        "known": known, "p50": lat[len(lat) // 2], "p95": lat[int(len(lat) * 0.95)],
         "fails": fails,
     }
 
@@ -147,6 +173,7 @@ def answer_eval(conn) -> dict:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Lore RAG eval")
     ap.add_argument("--answers", action="store_true", help="run answer-level (LLM) metrics")
+    ap.add_argument("--verify-ab", action="store_true", help="A/B the claim verifier (expensive; ~2x LLM calls)")
     ap.add_argument("--gate", action="store_true", help="enforce regression thresholds (CI); implies --answers")
     args = ap.parse_args()
     conn = init_schema(get_connection())
@@ -164,23 +191,42 @@ def main() -> None:
     sec = security_check(conn)
     print(f"\n=== Security (ACL @ retrieval) ===\n  public leak: {sec['public_leak']}  ·  hr can see: {sec['hr_can_see']}  ·  {'PASS ✓' if sec['pass'] else 'FAIL ✗'}")
 
+    if args.verify_ab:
+        print("\n=== Answer-level: claim verifier A/B (OFF vs ON) — the shipping decision ===")
+        off = answer_eval(conn, verify=False)
+        on = answer_eval(conn, verify=True)
+        print(f"  {'metric':22} {'OFF':>12} {'ON':>12}")
+        print(f"  {'answered correctly':22} {str(off['correct'])+'/'+str(off['n_ans']):>12} {str(on['correct'])+'/'+str(on['n_ans']):>12}")
+        print(f"  {'citation precision':22} {off['citation_precision']:>12.2f} {on['citation_precision']:>12.2f}")
+        print(f"  {'abstention accuracy':22} {off['abstain_acc']:>12.2f} {on['abstain_acc']:>12.2f}")
+        print(f"  {'false answers':22} {off['false_answers']:>12} {on['false_answers']:>12}")
+        print(f"  {'false abstentions':22} {off['false_abstentions']:>12} {on['false_abstentions']:>12}")
+        print(f"  {'p50 ms':22} {off['p50']:>12.0f} {on['p50']:>12.0f}")
+        print("  verdict: ship the verifier only if ON improves correctness with no regression"
+              " and acceptable latency.")
+        return
+
     if args.answers or args.gate:
-        print("\n=== Answer-level (hybrid) ===")
-        a = answer_eval(conn)
-        print(f"  answered correctly  : {a['answer_acc']:.2f}   ({a['n_ans']} answerable)")
+        print("\n=== Answer-level (verifier off — shipping config) ===")
+        a = answer_eval(conn, verify=False)
+        print(f"  answered correctly  : {a['correct']}/{a['n_ans']}  ({a['answer_acc']:.2f})")
         print(f"  citation precision  : {a['citation_precision']:.2f}")
-        print(f"  abstention accuracy : {a['abstain_acc']:.2f}   ({a['n_abs']} unanswerable)")
-        print(f"  false answers (hallucinated): {a['false_answers']}   ·   false abstentions: {a['false_abstentions']}")
+        print(f"  abstention accuracy : {a['abstain_acc']:.2f}  ({a['n_abs']} unanswerable)")
+        print(f"  false answers (hallucinated): {a['false_answers']}  ·  false abstentions: {a['false_abstentions']}")
+        print(f"  answer latency p50/p95 ms: {a['p50']:.0f}/{a['p95']:.0f}")
+        print(f"  known limitations (temporal, NOT gated): {a['known']['pass']}/{a['known']['total']} pass")
         if a["fails"]:
             print("  failures by category:")
             for q, cat in a["fails"]:
                 print(f"    - [{cat}]  {q}")
 
         if args.gate:
-            ok = (sec["pass"] and a["false_answers"] == 0 and a["citation_precision"] >= 0.9
-                  and hyb["recall"] >= 0.9 and a["abstain_acc"] >= 0.9)
-            print(f"\n=== Regression gate: {'PASS ✓' if ok else 'FAIL ✗'} ===")
-            print("  rules: no ACL leak · 0 hallucinations · citation≥0.90 · recall≥0.90 · abstention≥0.90")
+            ok = (sec["pass"] and a["false_answers"] == 0 and a["false_abstentions"] == 0
+                  and a["citation_precision"] >= 0.9 and hyb["recall"] >= 0.9
+                  and a["abstain_acc"] >= 0.9)
+            print(f"\n=== Regression gate: {'PASS' if ok else 'FAIL'} ===")
+            print("  HARD: ACL leak MUST=0. MUST NOT regress: citation precision, abstention,")
+            print("        0 hallucinations, 0 false-abstentions. recall>=0.90.")
             sys.exit(0 if ok else 1)
 
 

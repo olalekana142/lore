@@ -171,8 +171,13 @@ def _finalize(text: str, sources: list[dict]) -> tuple[str, list[dict]]:
     return text, shown
 
 
-def synthesize(question: str, r: dict, history: list[dict] | None = None) -> dict:
-    """Turn a retrieve() result into a final answer dict (no extra retrieval)."""
+def synthesize(question: str, r: dict, history: list[dict] | None = None,
+               verify: bool = False) -> dict:
+    """Turn a retrieve() result into a final answer dict (no extra retrieval).
+
+    verify=True runs a claim-level fact-check pass that strips/qualifies unsupported
+    claims. Off by default until the eval harness proves it helps without over-rejecting.
+    """
     if not r["facts"]:
         return {
             "question": question,
@@ -187,10 +192,22 @@ def synthesize(question: str, r: dict, history: list[dict] | None = None) -> dic
         max_tokens=700,
         temperature=0.2,
     )
+    result_verification = None
+    if verify:
+        from lore.retrieval.verify import verify_answer
+        v = verify_answer(question, text, r["facts"])
+        if v and v.get("changed"):
+            text = v["revised"]
+        if v:
+            result_verification = v.get("claims")
+
     text, shown = _finalize(text, r["sources"])
     # "Answered" = the model actually grounded its reply in a source.
     confidence = r["confidence"] if shown else "none"
-    return {"question": question, "answer": text, "sources": shown, "confidence": confidence}
+    out = {"question": question, "answer": text, "sources": shown, "confidence": confidence}
+    if result_verification is not None:
+        out["verification"] = result_verification
+    return out
 
 
 def answer(

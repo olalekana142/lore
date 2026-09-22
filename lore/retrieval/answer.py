@@ -21,6 +21,7 @@ import kuzu
 from lore.config import settings
 from lore.ingestion.embed import cosine, embed_text
 from lore.llm import complete
+from lore.retrieval.hybrid import bm25_scores, rank_indices, rrf, tokenize
 
 _SYSTEM_PROMPT = """You are the company's internal knowledge assistant. Answer each
 question using ONLY the numbered facts provided with that question. Each fact is tagged
@@ -34,7 +35,8 @@ Rules:
 
 
 def retrieve(conn: kuzu.Connection, company_id: str, question: str,
-             top_k: int | None = None, groups: list[str] | None = None) -> dict:
+             top_k: int | None = None, groups: list[str] | None = None,
+             hybrid: bool = True) -> dict:
     """Return the top facts for a question plus numbered source documents.
 
     Result: {query_vec, facts[], sources[], confidence, top_similarity, glossary[]}. Each
@@ -56,17 +58,19 @@ def retrieve(conn: kuzu.Connection, company_id: str, question: str,
         {"cid": company_id},
     )
     verify_cutoff = datetime.now() - timedelta(days=settings.review_days)
-    scored: list[dict] = []
+    # Candidate pool = every fact the caller may see (ACL applied BEFORE ranking, so the
+    # model never sees unauthorized content). No relevance pre-filter here — a low dense
+    # score but exact lexical match (e.g. "4357", "$60") should still be a candidate.
+    cand: list[dict] = []
     while res.has_next():
         fid, statement, emb, did, title, url, updated_at, version, owner, verified_at, audience = res.get_next()
         if not emb or not can_see(audience, groups):
             continue
         sim = cosine(query_vec, emb)
-        if sim < settings.min_relevance:
-            continue
-        scored.append(
+        cand.append(
             {
                 "fact_id": fid, "statement": statement, "similarity": round(sim, 4),
+                "_dense": sim,
                 "doc_id": did, "title": title, "url": url,
                 "updated_at": updated_at.isoformat() if updated_at else None,
                 "version": version,
@@ -74,8 +78,27 @@ def retrieve(conn: kuzu.Connection, company_id: str, question: str,
                 "verified": bool(verified_at and verified_at >= verify_cutoff),
             }
         )
-    scored.sort(key=lambda r: r["similarity"], reverse=True)
-    facts = scored[:top_k]
+
+    bm: list[float] = []
+    if hybrid and cand:
+        # Fuse dense + lexical rankings via Reciprocal Rank Fusion.
+        bm = bm25_scores(expanded["query"], [tokenize(c["statement"]) for c in cand])
+        fused = rrf(
+            [rank_indices([c["_dense"] for c in cand]), rank_indices(bm)],
+            weights=[1.0, settings.bm25_weight],  # dense primary, lexical booster
+        )
+        order = sorted(range(len(cand)), key=lambda i: fused.get(i, 0.0), reverse=True)
+    else:
+        order = rank_indices([c["_dense"] for c in cand])
+
+    # Keep the top-K, dropping pure noise (weak dense AND no lexical hit).
+    facts: list[dict] = []
+    for i in order:
+        c = cand[i]
+        if c["_dense"] >= settings.min_relevance or (bm and bm[i] > 0):
+            facts.append(c)
+        if len(facts) >= top_k:
+            break
 
     # Number the DISTINCT source documents; attach the facts pulled from each.
     sources: list[dict] = []
@@ -94,7 +117,7 @@ def retrieve(conn: kuzu.Connection, company_id: str, question: str,
         sources[doc_num[f["doc_id"]] - 1]["facts"].append(f["statement"])
         f["n"] = doc_num[f["doc_id"]]
 
-    top_sim = facts[0]["similarity"] if facts else 0.0
+    top_sim = max((f["similarity"] for f in facts), default=0.0)
     confidence = (
         "none" if not facts
         else "high" if top_sim >= 0.6

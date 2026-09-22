@@ -142,6 +142,33 @@ def test_role_hierarchy():
     assert role_at_least("admin", "member")
 
 
+def test_bm25_ranks_exact_terms_first():
+    from lore.retrieval.hybrid import bm25_scores, rank_indices, tokenize
+
+    docs = [
+        "Full-time employees accrue 25 paid time off days per year.",
+        "The office is open from 9 to 5 on weekdays.",
+        "Contact the IT Service Desk at extension 4357 when locked out.",
+    ]
+    toks = [tokenize(d) for d in docs]
+    # exact rare term should dominate
+    scores = bm25_scores("extension 4357", toks)
+    assert rank_indices(scores)[0] == 2
+    scores2 = bm25_scores("how many PTO days", toks)
+    assert rank_indices(scores2)[0] == 0
+
+
+def test_rrf_rewards_agreement_and_weights():
+    from lore.retrieval.hybrid import rrf
+
+    # item 2 ranks high in both -> should win
+    fused = rrf([[2, 0, 1], [2, 1, 0]])
+    assert max(fused, key=fused.get) == 2
+    # weighting: down-weighting the second ranker lets the first decide top item
+    fused_w = rrf([[0, 1, 2], [2, 1, 0]], weights=[1.0, 0.1])
+    assert max(fused_w, key=fused_w.get) == 0
+
+
 def test_embed_is_deterministic_and_normalized():
     a, b = embed_text("how many PTO days do I get"), embed_text("how many PTO days do I get")
     assert cosine(a, b) > 0.999  # identical text -> identical vector

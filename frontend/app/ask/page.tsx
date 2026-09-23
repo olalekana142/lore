@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  askStream, sendFeedback, escalate, suggestAction, executeAction,
-  type Confidence, type Source, type Turn, type ActionSuggestion, type Ticket,
+  askStream, sendFeedback, escalate, suggestAction, executeAction, challengeAnswer,
+  type Confidence, type Source, type Turn, type ActionSuggestion, type Ticket, type Challenge,
 } from "@/lib/api";
 import { useCompany } from "@/lib/useCompany";
 import AnswerText from "../components/AnswerText";
@@ -218,6 +218,41 @@ function WhyPanel({ sources }: { sources: Source[] }) {
   );
 }
 
+function ChallengePanel({ chal }: { chal: Challenge }) {
+  const tone = chal.verdict === "survives" ? "var(--green)"
+    : chal.verdict === "contested" ? "var(--amber)" : "var(--muted)";
+  const headline = chal.verdict === "survives" ? "✓ Answer survives the challenge"
+    : chal.verdict === "contested" ? "⚠ Answer is contested"
+    : chal.verdict === "unchallenged" ? "✓ No contradicting evidence found"
+    : "No grounded answer to challenge";
+  return (
+    <div className="animate-scale-in mt-3 rounded-xl border border-border bg-surface-2 p-4">
+      <div className="mb-1.5 flex items-center gap-2 text-sm font-semibold" style={{ color: tone }}>
+        <IconShieldCheck size={16} /> {headline}
+      </div>
+      <p className="mb-2.5 text-xs text-muted-dim">
+        Lore searched for evidence against this answer{chal.defender ? <> and defended it with <b>{chal.defender.title}</b>{chal.defender.canonical ? " (canonical)" : ""}</> : ""}.
+        {chal.challenges.length > 0 && ` Found ${chal.challenges.length} contradicting statement${chal.challenges.length > 1 ? "s" : ""}:`}
+      </p>
+      <ul className="space-y-2">
+        {chal.challenges.map((c, i) => (
+          <li key={i} className="rounded-lg bg-surface p-2.5 text-xs">
+            <div className="flex items-start gap-2">
+              <span style={{ color: c.beaten ? "var(--green)" : "var(--amber)" }}>{c.beaten ? "✓" : "⚠"}</span>
+              <div>
+                <div>“{c.statement}” <span className="text-muted-dim">({c.title})</span></div>
+                <div className="mt-0.5 text-muted-dim">
+                  {c.beaten ? "beaten: " : "unresolved: "}{c.resolution}
+                </div>
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function AssistantBubble({ msg, companyId, question }: { msg: Msg; companyId: string; question: string }) {
   const [cite, setCite] = useState<number | null>(null);
   const [rated, setRated] = useState<"up" | "down" | null>(null);
@@ -226,7 +261,18 @@ function AssistantBubble({ msg, companyId, question }: { msg: Msg; companyId: st
   const [action, setAction] = useState<ActionSuggestion | null>(null);
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [filing, setFiling] = useState(false);
+  const [chal, setChal] = useState<Challenge | null>(null);
+  const [challenging, setChallenging] = useState(false);
   const askedRef = useRef(false);
+
+  const runChallenge = async () => {
+    setChallenging(true);
+    try {
+      setChal(await challengeAnswer(companyId, question));
+    } finally {
+      setChallenging(false);
+    }
+  };
 
   // Once the answer is complete, ask whether it can be turned into an action.
   useEffect(() => {
@@ -290,17 +336,28 @@ function AssistantBubble({ msg, companyId, question }: { msg: Msg; companyId: st
             </button>
             {rated && <span className="ml-1 text-xs text-muted-dim">Thanks for the feedback</span>}
             {msg.sources && msg.sources.length > 0 && (
-              <button
-                onClick={() => setWhy((w) => !w)}
-                className={`ml-auto inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors ${why ? "text-accent" : "text-muted-dim hover:text-foreground"}`}
-              >
-                <IconInfo size={14} /> Why this answer?
-              </button>
+              <div className="ml-auto flex items-center gap-1">
+                <button
+                  onClick={runChallenge}
+                  disabled={challenging}
+                  className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted-dim transition-colors hover:text-foreground"
+                  title="Adversarially search for evidence against this answer"
+                >
+                  <IconShieldCheck size={14} /> {challenging ? "Challenging…" : "Challenge"}
+                </button>
+                <button
+                  onClick={() => setWhy((w) => !w)}
+                  className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors ${why ? "text-accent" : "text-muted-dim hover:text-foreground"}`}
+                >
+                  <IconInfo size={14} /> Why this answer?
+                </button>
+              </div>
             )}
           </div>
         )}
 
         {why && msg.sources && msg.sources.length > 0 && <WhyPanel sources={msg.sources} />}
+        {chal && <ChallengePanel chal={chal} />}
 
         {action?.actionable && (
           <div className="mt-3 rounded-lg border p-3" style={{ borderColor: "var(--accent)", background: "var(--accent-weak)" }}>

@@ -333,6 +333,22 @@ export async function knowledgeCheck(companyId: string, docId: string): Promise<
   }));
 }
 
+export interface Challenge {
+  question: string; answer: string;
+  verdict: "survives" | "contested" | "unchallenged" | "no_answer";
+  defender: { doc_id: string; title: string; authority?: number; canonical: boolean; verified: boolean } | null;
+  challenges: {
+    statement: string; title: string; doc_id: string; why: string;
+    resolution: string; beaten: boolean; superseded: boolean; authority: number; verified: boolean;
+  }[];
+}
+export async function challengeAnswer(companyId: string, question: string): Promise<Challenge> {
+  return j(await fetch(`${BASE}/answers/challenge`, {
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeader() },
+    body: JSON.stringify({ company_id: companyId, question }),
+  }));
+}
+
 export interface Reanswer {
   id: string; question: string; old_answer: string; new_answer: string; changed: boolean;
 }

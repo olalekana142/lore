@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from lore import actions, analytics, auth, escalations, feedback, glossary, health, knowledge, onboarding, provenance
+from lore import actions, analytics, auth, challenge, escalations, feedback, glossary, health, knowledge, onboarding, provenance
 from lore.config import settings
 from lore.graph import queries
 from lore.graph.schema import get_connection, init_schema
@@ -572,6 +572,20 @@ def knowledge_check(req: DocRequest, authorization: str | None = Header(None)) -
     if res is None:
         raise HTTPException(status_code=404, detail="document not found")
     return res
+
+
+class ChallengeRequest(BaseModel):
+    company_id: str
+    question: str
+
+
+@app.post("/answers/challenge")
+def challenge_answer(req: ChallengeRequest, authorization: str | None = Header(None)) -> dict:
+    """Adversarially search for evidence against the answer; report whether it survives.
+
+    Available to any signed-in user (uses their own ACL groups)."""
+    cid, groups, _ = _identity(req.company_id, authorization)
+    return challenge.challenge_answer(_db(), cid, req.question, groups=groups)
 
 
 @app.get("/answers/stale")

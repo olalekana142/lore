@@ -166,6 +166,67 @@ def generate_questions(conn: kuzu.Connection, company_id: str, doc_id: str,
     return {"doc_id": doc_id, "title": doc["title"], "verified": verified, "rejected": rejected}
 
 
+# --------------------------------------------------------------- #7 policy ambiguity detection
+_AMBIG_PROMPT = """You are a meticulous policy reviewer. Read the policy and write {k} sharp
+questions the policy does NOT clearly answer — the edge cases, undefined terms, unstated
+exceptions, boundary/scope conditions, or internal conflicts a reader would be unsure about.
+Do NOT ask questions the policy already answers plainly.
+
+Return ONLY JSON: {{"questions": [{{"q": "<question>", "type": "undefined-term|exception|missing-condition|scope|conflict"}}]}}
+
+POLICY: {title}
+\"\"\"{text}\"\"\"
+"""
+
+_AMBIG_TYPES = {"undefined-term", "exception", "missing-condition", "scope", "conflict"}
+
+
+def detect_ambiguities(conn: kuzu.Connection, company_id: str, doc_id: str,
+                       groups: list[str] | None = None, k: int = 5) -> dict | None:
+    """Probe a policy for questions it doesn't clearly answer — real ambiguities/gaps.
+
+    Generates edge-case questions from the policy, then tests each against the knowledge base:
+    - unanswered anywhere        -> an unresolved ambiguity (the policy leaves it open)
+    - answered only by ANOTHER doc -> the policy is silent but another source covers it
+    Questions this document answers itself are dropped (not ambiguous).
+    """
+    from lore.retrieval.answer import retrieve, synthesize
+
+    doc = get_document(conn, company_id, doc_id, groups)
+    if doc is None:
+        return None
+    raw = complete(
+        _AMBIG_PROMPT.format(k=k, title=doc["title"], text=doc["text"][:3500]),
+        model=settings.generation_model, max_tokens=500, temperature=0.5, json_mode=True,
+    )
+    try:
+        data = json.loads(raw[raw.find("{"): raw.rfind("}") + 1])
+        items = data.get("questions", []) if isinstance(data, dict) else []
+    except (json.JSONDecodeError, ValueError):
+        items = []
+
+    ambiguities, covered = [], 0
+    for it in items[:k]:
+        q = (it.get("q") if isinstance(it, dict) else it) or ""
+        if not isinstance(q, str) or not q.strip():
+            continue
+        atype = (it.get("type") if isinstance(it, dict) else "") or "missing-condition"
+        if atype not in _AMBIG_TYPES:
+            atype = "missing-condition"
+        res = synthesize(q, retrieve(conn, company_id, q, groups=groups))
+        cited = {s["doc_id"] for s in res["sources"]}
+        if res["confidence"] == "none":
+            ambiguities.append({"question": q, "type": atype, "status": "unresolved", "answered_by": None})
+        elif doc_id in cited:
+            covered += 1
+        else:
+            titles = [s["title"] for s in res["sources"]]
+            ambiguities.append({"question": q, "type": atype, "status": "answered_elsewhere",
+                                "answered_by": titles[:2]})
+    return {"doc_id": doc_id, "title": doc["title"], "ambiguities": ambiguities,
+            "covered_count": covered, "probed": len([i for i in items[:k]])}
+
+
 # --------------------------------------------------------------- gap -> draft -> publish -> verify
 def publish_from_gap(conn: kuzu.Connection, company_id: str, question: str, title: str,
                      text: str, groups: list[str] | None = None) -> dict:

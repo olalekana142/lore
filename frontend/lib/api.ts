@@ -372,6 +372,20 @@ export async function reanswer(companyId: string, answerId: string): Promise<Rea
   }));
 }
 
+export interface Ambiguities {
+  doc_id: string; title: string; probed: number; covered_count: number;
+  ambiguities: {
+    question: string; type: string;
+    status: "unresolved" | "answered_elsewhere"; answered_by: string[] | null;
+  }[];
+}
+export async function detectAmbiguities(companyId: string, docId: string): Promise<Ambiguities> {
+  return j(await fetch(`${BASE}/documents/ambiguities`, {
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeader() },
+    body: JSON.stringify({ company_id: companyId, doc_id: docId }),
+  }));
+}
+
 export async function getImpact(companyId: string, docId: string): Promise<Impact> {
   return j(await fetch(`${BASE}/impact?${qs({ company_id: companyId, doc_id: docId })}`, { headers: authHeader() }));
 }

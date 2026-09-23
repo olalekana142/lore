@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
   getDocument, verifyDocument, setAudience,
-  getImpact, getHistory, getDiff, generateQuestions, knowledgeCheck, supersedeDocument, reanswer, setCanonical,
-  type DocDetail, type Impact, type History, type GeneratedQuestions, type KnowledgeCheck, type Reanswer,
+  getImpact, getHistory, getDiff, generateQuestions, knowledgeCheck, supersedeDocument, reanswer, setCanonical, detectAmbiguities,
+  type DocDetail, type Impact, type History, type GeneratedQuestions, type KnowledgeCheck, type Reanswer, type Ambiguities,
 } from "@/lib/api";
 import { useCompany } from "@/lib/useCompany";
 import { useAuth, atLeast } from "@/lib/useAuth";
@@ -184,6 +184,78 @@ function GenerateQuestions({ companyId, docId }: { companyId: string; docId: str
               <li key={`r${i}`} className="flex items-start gap-2 text-sm text-muted-dim"><span style={{ color: "var(--amber)" }}>✗</span>{r.question}</li>
             ))}
           </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
+const AMBIG_LABEL: Record<string, string> = {
+  "undefined-term": "undefined term", exception: "unstated exception",
+  "missing-condition": "missing condition", scope: "unclear scope", conflict: "internal conflict",
+};
+
+function AmbiguityFinder({ companyId, docId }: { companyId: string; docId: string }) {
+  const [res, setRes] = useState<Ambiguities | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function run() {
+    setBusy(true);
+    try {
+      setRes(await detectAmbiguities(companyId, docId));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="mb-5">
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-sm font-semibold">
+          <span className="text-accent"><IconGap size={16} /></span> Find ambiguities
+        </h2>
+        <button onClick={run} disabled={busy} className="btn-ghost px-3 py-1.5 text-xs">
+          {busy ? "Probing…" : res ? "Re-run" : "Probe this policy"}
+        </button>
+      </div>
+      <p className="mb-2 text-xs text-muted">
+        Lore asks the edge-case questions a careful reader would — then flags the ones this
+        policy doesn’t clearly answer.
+      </p>
+      {res && (
+        <div className="card p-4">
+          {res.ambiguities.length === 0 ? (
+            <p className="text-sm" style={{ color: "var(--green)" }}>
+              ✓ No ambiguities found — the policy answered all {res.probed} probing questions.
+            </p>
+          ) : (
+            <>
+              <p className="mb-2 text-xs text-muted">
+                {res.ambiguities.length} of {res.probed} probing questions weren’t clearly resolved by this policy
+                {res.covered_count > 0 && ` (${res.covered_count} were)`}.
+              </p>
+              <ul className="space-y-2">
+                {res.ambiguities.map((a, i) => (
+                  <li key={i} className="rounded-lg bg-surface-2 p-2.5 text-sm">
+                    <div className="flex items-start gap-2">
+                      <span style={{ color: a.status === "unresolved" ? "var(--amber)" : "var(--muted)" }}>
+                        {a.status === "unresolved" ? "⚠" : "↗"}
+                      </span>
+                      <div>
+                        <div>{a.question}</div>
+                        <div className="mt-0.5 text-xs text-muted-dim">
+                          <span className="chip mr-1">{AMBIG_LABEL[a.type] ?? a.type}</span>
+                          {a.status === "unresolved"
+                            ? "not answered anywhere in the knowledge base"
+                            : `answered elsewhere — ${(a.answered_by ?? []).join(", ")}`}
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
       )}
     </section>
@@ -540,6 +612,7 @@ export default function DocumentPage() {
           {canEdit && <KnowledgeCheckPanel companyId={companyId} docId={doc.doc_id} />}
           {canEdit && <ImpactBar companyId={companyId} docId={doc.doc_id} />}
           {canEdit && <GenerateQuestions companyId={companyId} docId={doc.doc_id} />}
+          {canEdit && <AmbiguityFinder companyId={companyId} docId={doc.doc_id} />}
 
           <section>
             <h2 className="mb-2 text-sm font-semibold">Full text</h2>

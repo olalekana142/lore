@@ -585,6 +585,16 @@ def eval_generate(req: DocRequest, authorization: str | None = Header(None)) -> 
     return res
 
 
+@app.post("/documents/ambiguities")
+def document_ambiguities(req: DocRequest, authorization: str | None = Header(None)) -> dict:
+    """Probe a policy for questions it doesn't clearly answer (ambiguity detection). Editor+."""
+    cid, groups, _ = _require(authorization, "editor")
+    res = knowledge.detect_ambiguities(_db(), cid, req.doc_id, groups=groups)
+    if res is None:
+        raise HTTPException(status_code=404, detail="document not found")
+    return res
+
+
 @app.post("/knowledge/check")
 def knowledge_check(req: DocRequest, authorization: str | None = Header(None)) -> dict:
     """Publish-time knowledge check: impact + conflicts + affected eval cases -> verdict.

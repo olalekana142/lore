@@ -30,6 +30,60 @@ INGEST company docs  →  BUILD a graph of documents + facts + topics
 
 ---
 
+## What Lore does — your company's knowledge, continuously verified
+
+Lore isn't "ChatGPT over PDFs." It doesn't just retrieve knowledge — it can tell you **where
+its knowledge came from, whether it's trustworthy, what changed, what conflicts, what a change
+will affect, and whether its own past answers are still grounded.** That full loop is the moat:
+
+```
+                         COMPANY KNOWLEDGE
+                                │
+                        ┌───────▼────────┐
+                        │      LORE      │
+                        └───────┬────────┘
+         ┌──────────────────────┼──────────────────────┐
+         ▼                      ▼                      ▼
+       ANSWER                 AUDIT                  CHANGE
+   evidence · cite       gaps · conflicts      versions · impact
+   why · challenge       staleness · alerts    regressions · canonical
+         └──────────────────────┼──────────────────────┘
+                                ▼
+                    IMPROVE  (gap → draft → publish)
+                                │
+                    RE-EVALUATE (stale answers → re-answer)
+                                └──────────────► repeat
+```
+
+**Answer — grounded, and defensible**
+- **Cited answers** — every claim links to the source document; click a citation to see the exact sentence.
+- **Why this answer** — a trust panel: current vs retired sources, verified, owner, authority, freshness.
+- **Challenge this answer** — adversarially searches for evidence *against* the answer and reports whether it **survives** (e.g. a legacy "20 PTO days" claim, found and beaten as superseded).
+- **Permission-aware** — answers, search and the library are filtered by each user's groups; you only ever get cited what you're allowed to see.
+
+**Audit — the knowledge, continuously checked**
+- **Knowledge audit** — one scorecard: freshness, verification, ownership, citation coverage.
+- **Conflict & duplicate detection** — reasons *across* documents to flag contradictory facts, with a resolution recommendation (`canonical > current > authority > recency > verified`).
+- **Proactive alerts** — one prioritised feed (conflicts · past review date · missing owners · stale answers · high-demand gaps · unused docs) so problems surface without anyone looking.
+- **Policy ambiguity detection** — probes a policy with the edge-case questions a careful reader would ask, and flags the ones it *doesn't* clearly answer (undefined terms, exceptions, scope).
+
+**Change — managed, not silent**
+- **Version history + "what changed"** — every re-ingest snapshots the prior version; an LLM diff shows the change (e.g. *PTO 20 → 25, 90-day wait removed*).
+- **Knowledge impact analysis** — before you edit/retire a doc: what facts, related docs and questions it touches.
+- **Knowledge Check (the publishing gate)** — one action runs impact + conflict detection + the **governed evaluation cases** a doc is responsible for, and returns a verdict: `clean → conflicts → regressions`. A governed case that should pass but now fails is a **knowledge regression**, shown with expected-vs-now and a cause. The eval harness becomes part of the publishing workflow.
+- **Canonical source / authority** — admins designate the authoritative source of truth for a topic; it wins in retrieval and conflict resolution, cutting through years of duplicated docs.
+
+**Improve & re-evaluate — the self-healing half**
+- **Gap → draft → publish → verify** — an unanswered question becomes a drafted doc; publishing re-asks the original question, confirms it's now answered + cited, and seeds evidence-verified eval questions. *Gap closure, measured.*
+- **Historical answer invalidation** — every grounded answer is pinned to the knowledge state (docs @ versions) it used; when a source changes, Lore flags the past answers it made stale and can **re-answer** them, showing old vs new.
+
+Backing all of it: a **RAG evaluation harness** run as a regression gate (recall · MRR · citation
+precision · abstention 2×2 · ACL-leak = 0 · latency). Nothing ships unless it beats or preserves
+the baseline — *evidence before complexity*. Hybrid retrieval and a claim verifier were built,
+measured, and left **off** because the harness proved they didn't help on this corpus.
+
+---
+
 ## Why GraphRAG (and not a pile of document chunks)
 
 Answers are grounded on **facts** extracted from documents, and facts, documents and
@@ -89,19 +143,22 @@ topics are **linked**. That structure buys things flat chunk-search can't:
 | Node | Purpose | Key properties |
 |---|---|---|
 | `Company` | tenant / workspace | `id`, `name` |
-| `Document` | one policy/SOP/wiki/FAQ | `id`, `title`, `source`, `url`, `text`, `version`, `updated_at` |
+| `Document` | one policy/SOP/wiki/FAQ | `id`, `title`, `source`, `url`, `text`, `version`, `updated_at`, `owner`, `verified_at`, `audience`, `effective_from/to`, `authority`, `canonical`, `cited_count` |
+| `DocumentVersion` | archived prior version (history/diff) | `id`, `doc_id`, `version`, `text`, `effective_from/to` |
 | `Fact` | atomic answerable statement | `id`, `statement`, `embedding` |
 | `Topic` | department / theme | `id`, `name` |
-| `EmployeeQuestion` | worker questions (gap-finding, later) | `id`, `text`, `asked_count`, `embedding` |
+| `User` | account + access | `username`, `role` (admin/editor/member), `groups`, salted `pw_hash` |
+| `Answer` | a generated answer pinned to its knowledge state | `question`, `answer`, `cited_docs`, `cited_versions`, `created_at` |
+| `EmployeeQuestion` | worker questions (gap-finding) | `id`, `text`, `asked_count`, `unanswered_count`, `coverage`, `topic`, `embedding` |
+| `GlossaryTerm` · `Feedback` · `Escalation` · `Ticket` | jargon, thumbs, HR inbox, dispatched actions | — |
 
 ### Edges
 
 ```
-Company  --OWNS-->        Document
-Document --STATES-->      Fact
-Document --ABOUT-->       Topic
-Company  --ASKED-->       EmployeeQuestion
-Topic    --CONNECTED_TO-> Topic
+Company  --OWNS-->        Document          Document --HAS_VERSION--> DocumentVersion
+Document --STATES-->      Fact              Company  --GENERATED-->   Answer
+Document --ABOUT-->       Topic             Company  --DEFINES-->     GlossaryTerm
+Company  --ASKED-->       EmployeeQuestion  Topic    --CONNECTED_TO-> Topic
 ```
 
 ---
@@ -254,7 +311,9 @@ python -m lore.ingestion.pipeline --company acme --source sample_data/acme_pto_u
 - [x] **Phase 4 — More sources**: PDF/DOCX parsing ✅ · Google Drive connector ✅ · database connector
 - [x] **Phase 5 — Intelligence**: knowledge gaps + auto-draft ✅ · conflict/duplicate detection ✅ · ROI analytics ✅ · glossary ✅
 - [x] **Phase 6 — Trust & workflow**: conflict-at-upload ✅ · ownership/verification ✅ · escalate→learn ✅ · onboarding playbooks ✅ · actionable workflows ✅ · provenance highlighting ✅
-- [~] **Phase 7 — Ops**: auth + group permissions ✅ · per-thread DB connections ✅ · SSO · Slack bot · expert/people graph · real Jira/Slack action connectors · scheduled re-sync
+- [x] **Phase 7 — Ops**: auth + group permissions ✅ · RBAC (admin/editor/member) ✅ · role-based dashboards ✅ · per-thread DB connections ✅
+- [x] **Phase 8 — Knowledge Change Management (Lore 2.0)**: RAG eval harness + regression gate ✅ · version history + diff ✅ · knowledge impact analysis ✅ · Knowledge Check (impact + conflict + governed eval → verdict) ✅ · historical answer invalidation + re-answer ✅ · canonical source / authority ✅ · challenge-this-answer ✅ · gap → draft → publish → verify ✅ · proactive alerts ✅ · policy ambiguity detection ✅
+- [ ] **Later**: SSO · Slack bot · expert/people graph · real Jira/Slack action connectors · scheduled re-sync · database connector
 
 ---
 

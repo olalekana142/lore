@@ -67,6 +67,14 @@ NODE_TABLES = [
         coverage DOUBLE, topic STRING, last_asked TIMESTAMP,
         embedding DOUBLE[], PRIMARY KEY(id)
     )""",
+    # A generated answer, pinned to the knowledge state it was based on: which documents it
+    # cited and at what VERSION. Lets Lore later flag answers a change made stale (provenance
+    # / historical answer invalidation) and offer a re-answer against fresh evidence.
+    """CREATE NODE TABLE IF NOT EXISTS Answer(
+        id STRING, company_id STRING, question STRING, answer STRING, confidence STRING,
+        cited_docs STRING[], cited_versions INT64[], created_at TIMESTAMP,
+        reanswered_at TIMESTAMP, PRIMARY KEY(id)
+    )""",
 ]
 
 # --- Relationship tables ---
@@ -78,6 +86,7 @@ REL_TABLES = [
     "CREATE REL TABLE IF NOT EXISTS DEFINES(FROM Company TO GlossaryTerm)",
     "CREATE REL TABLE IF NOT EXISTS HAS_VERSION(FROM Document TO DocumentVersion)",
     "CREATE REL TABLE IF NOT EXISTS CONNECTED_TO(FROM Topic TO Topic, weight DOUBLE)",
+    "CREATE REL TABLE IF NOT EXISTS GENERATED(FROM Company TO Answer)",
 ]
 
 

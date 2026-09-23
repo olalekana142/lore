@@ -178,10 +178,13 @@ def knowledge_check(conn: kuzu.Connection, company_id: str, doc_id: str,
     from lore import health
     from lore.retrieval.answer import retrieve, synthesize
 
+    from lore import provenance
+
     impact = document_impact(conn, company_id, doc_id, groups)
     if impact is None:
         return None
     conflicts = health.conflicts_for_docs(conn, company_id, [doc_id])
+    stale = provenance.stale_answers(conn, company_id, doc_id)
 
     affected = [g for g in evalmod.GOLDEN
                 if not g.get("abstain") and not g.get("known_limitation") and doc_id in g.get("docs", [])]
@@ -191,14 +194,20 @@ def knowledge_check(conn: kuzu.Connection, company_id: str, doc_id: str,
         res = synthesize(g["q"], r)
         text = res["answer"].lower()
         cited = {s["doc_id"] for s in res["sources"]}
-        ok = (res["confidence"] != "none"
-              and all(h.lower() in text for h in g.get("has", []))
+        has_ok = all(h.lower() in text for h in g.get("has", []))
+        # a refute case is correct only if the answer qualifies/denies the over-claim
+        refute_ok = (not g.get("refute")) or any(cue in text for cue in evalmod._REFUTE_CUES)
+        ok = (res["confidence"] != "none" and has_ok and refute_ok
               and bool(set(g["docs"]) & cited))
-        results.append({"question": g["q"], "pass": ok, "answer": res["answer"][:140]})
+        expected = ", ".join(g.get("has", [])) or ("a qualified answer" if g.get("refute") else "a grounded, cited answer")
+        entry = {"question": g["q"], "pass": ok, "answer": res["answer"][:140], "expected": expected}
         if not ok:
+            entry["cause"] = _regression_cause(g, res, cited, conflicts)
             regressions += 1
+        results.append(entry)
 
-    verdict = "regressions" if (regressions or conflicts) else "clean"
+    # three-state verdict: a failing governed case is worse than a mere conflict
+    verdict = "regressions" if regressions else ("conflicts" if conflicts else "clean")
     return {
         "doc_id": doc_id, "title": impact["title"], "verdict": verdict,
         "impact": impact["total_impact"], "impact_detail": {
@@ -207,7 +216,25 @@ def knowledge_check(conn: kuzu.Connection, company_id: str, doc_id: str,
         },
         "conflicts": conflicts, "conflict_count": len(conflicts),
         "eval": results, "regressions": regressions, "eval_total": len(results),
+        "stale_answers": [
+            {"id": s["id"], "question": s["question"], "created_at": s["created_at"]}
+            for s in stale
+        ],
+        "stale_answer_count": len(stale),
     }
+
+
+def _regression_cause(g: dict, res: dict, cited: set[str], conflicts: list[dict]) -> str:
+    """Explain WHY a governed eval case now fails — the 'cause' line editors see."""
+    if res["confidence"] == "none":
+        return "answer is no longer grounded — the evidence wasn't retrieved"
+    if not (set(g["docs"]) & cited):
+        other = cited - set(g["docs"])
+        return f"answer now cites {', '.join(sorted(other)) or 'a different source'} instead of this document"
+    if conflicts:
+        c = conflicts[0]
+        return f'conflicting statement in "{c["b"]["title"]}": “{c["b"]["statement"][:90]}”'
+    return "the expected value is missing from the answer"
 
 
 # --------------------------------------------------------------- helpers

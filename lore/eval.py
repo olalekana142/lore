@@ -27,8 +27,13 @@ COMPANY = "acme"
 PUBLIC = ["everyone"]
 HR = ["hr"]
 
-# For "refute" adversarial cases: a correct answer qualifies/denies the over-claim.
-_REFUTE_CUES = ["not ", "n't", " only", "require", "approval", "must ", "may ", "up to", "cannot", " no "]
+# For "refute" adversarial cases: a correct answer qualifies/denies the over-claim. Cover
+# denial ("no", "not"), limits ("only", "up to", "cap", "maximum"), conditions ("require",
+# "approval", "must") and removal/immediacy ("removed", "no longer", "immediately").
+_REFUTE_CUES = [
+    "not ", "n't", "no longer", " no ", "no,", "only", "require", "approval", "must ",
+    "may ", "up to", "cannot", "cap", "limit", "maximum", "remov", "eliminat", "immediat",
+]
 
 # question · expected doc_ids · answer must contain · must NOT contain · groups · flags
 GOLDEN: list[dict] = [
@@ -54,6 +59,8 @@ GOLDEN: list[dict] = [
     {"q": "I can carry over PTO — does that mean I can carry over unlimited days?", "docs": ["upload:pto-policy"], "refute": True, "groups": PUBLIC, "adversarial": "inference"},
     {"q": "There's a home office stipend — does the company pay my full home rent?", "docs": ["upload:remote-work"], "refute": True, "groups": PUBLIC, "adversarial": "inference"},
     {"q": "Since sick leave exists, can I take unlimited sick days?", "docs": ["upload:sick-leave"], "refute": True, "groups": PUBLIC, "adversarial": "inference"},
+    # --- stale rule: the 90-day PTO waiting period was REMOVED; a correct answer denies it ---
+    {"q": "Do new hires still have to wait 90 days before using PTO?", "docs": ["upload:pto-policy"], "refute": True, "groups": PUBLIC, "adversarial": "stale"},
     {"q": "Since there is parental leave, is it fully paid for a whole year?", "docs": ["upload:acme-parental-leave"], "refute": True, "groups": PUBLIC, "adversarial": "inference"},
     # --- temporal: current-vs-superseded is shipped & gated; a "current" question must not
     #     return the retired policy ---

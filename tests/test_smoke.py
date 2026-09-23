@@ -195,3 +195,36 @@ def test_dedupe_matches_identical_fact():
     seen["fact:1"] = vec
     assert dedupe_key(vec, seen) == "fact:1"
     assert dedupe_key(embed_text("The office is closed on federal holidays"), seen) is None
+
+
+def test_provenance_pins_and_invalidates_answers(tmp_path):
+    """An answer is pinned to the doc version it cited; a later version makes it stale."""
+    import kuzu
+
+    from lore import provenance
+    from lore.graph.schema import NODE_TABLES, REL_TABLES
+
+    conn = kuzu.Connection(kuzu.Database(str(tmp_path / "prov.kuzu")))
+    for ddl in NODE_TABLES + REL_TABLES:
+        conn.execute(ddl)
+    conn.execute("MERGE (c:Company {id:'acme'}) SET c.name='acme'")
+    conn.execute("MERGE (d:Document {id:'upload:pto-policy'}) SET d.version=1, d.title='PTO'")
+    conn.execute("MATCH (c:Company {id:'acme'}),(d:Document {id:'upload:pto-policy'}) MERGE (c)-[:OWNS]->(d)")
+
+    aid = provenance.record_answer(conn, "acme", {
+        "question": "How many PTO days?", "answer": "20 days [1]", "confidence": "high",
+        "sources": [{"doc_id": "upload:pto-policy", "version": 1}],
+    })
+    assert aid and provenance.stale_answers(conn, "acme") == []       # nothing changed yet
+
+    conn.execute("MATCH (d:Document {id:'upload:pto-policy'}) SET d.version=2")  # a new version lands
+    stale = provenance.stale_answers(conn, "acme")
+    assert len(stale) == 1
+    src = stale[0]["stale_sources"][0]
+    assert (src["answered_at_version"], src["current_version"]) == (1, 2)
+    assert provenance.stale_count(conn, "acme", "upload:pto-policy") == 1
+
+    # ungrounded answers carry no provenance and are never recorded
+    assert provenance.record_answer(conn, "acme", {
+        "question": "x", "answer": "not documented", "confidence": "none", "sources": [],
+    }) is None

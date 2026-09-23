@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from lore import actions, analytics, auth, escalations, feedback, glossary, health, knowledge, onboarding
+from lore import actions, analytics, auth, escalations, feedback, glossary, health, knowledge, onboarding, provenance
 from lore.config import settings
 from lore.graph import queries
 from lore.graph.schema import get_connection, init_schema
@@ -305,6 +305,7 @@ def ask(req: AskRequest, authorization: str | None = Header(None)) -> dict:
         coverage=r["top_similarity"], answered=bool(result["sources"]), topic=topic,
     )
     analytics.record_citations(_db(), [s["doc_id"] for s in result["sources"]])
+    provenance.record_answer(_db(), company_id, result)  # pin to the knowledge state it used
     return result
 
 
@@ -339,6 +340,9 @@ def ask_stream(req: AskRequest, authorization: str | None = Header(None)) -> Str
             coverage=r["top_similarity"], answered=bool(cited), topic=topic,
         )
         analytics.record_citations(_db(), [s["doc_id"] for s in cited])
+        provenance.record_answer(_db(), company_id,
+                                 {"question": question, "answer": full,
+                                  "sources": cited, "confidence": r["confidence"] if cited else "none"})
         yield json.dumps({"type": "done", "sources": cited}) + "\n"
 
     return StreamingResponse(gen(), media_type="application/x-ndjson")
@@ -553,6 +557,25 @@ def knowledge_check(req: DocRequest, authorization: str | None = Header(None)) -
     res = knowledge.knowledge_check(_db(), cid, req.doc_id, groups=groups)
     if res is None:
         raise HTTPException(status_code=404, detail="document not found")
+    return res
+
+
+@app.get("/answers/stale")
+def answers_stale(company_id: str, doc_id: str | None = None,
+                  authorization: str | None = Header(None)) -> list[dict]:
+    """Past answers whose cited evidence has since changed version (historical
+    invalidation). Optionally scoped to one document. Editor+."""
+    cid, _, _ = _require(authorization, "editor")
+    return provenance.stale_answers(_db(), cid, doc_id)
+
+
+@app.post("/answers/reanswer")
+def answers_reanswer(req: dict, authorization: str | None = Header(None)) -> dict:
+    """Re-answer a stored question against current evidence; return before/after. Editor+."""
+    cid, groups, _ = _require(authorization, "editor")
+    res = provenance.reanswer(_db(), cid, req.get("answer_id", ""), groups=groups)
+    if res is None:
+        raise HTTPException(status_code=404, detail="answer not found")
     return res
 
 

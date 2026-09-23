@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
   getDocument, verifyDocument, setAudience,
-  getImpact, getHistory, getDiff, generateQuestions, knowledgeCheck, supersedeDocument,
-  type DocDetail, type Impact, type History, type GeneratedQuestions, type KnowledgeCheck,
+  getImpact, getHistory, getDiff, generateQuestions, knowledgeCheck, supersedeDocument, reanswer,
+  type DocDetail, type Impact, type History, type GeneratedQuestions, type KnowledgeCheck, type Reanswer,
 } from "@/lib/api";
 import { useCompany } from "@/lib/useCompany";
 import { useAuth, atLeast } from "@/lib/useAuth";
@@ -194,6 +194,18 @@ function KnowledgeCheckPanel({ companyId, docId }: { companyId: string; docId: s
   const [chk, setChk] = useState<KnowledgeCheck | null>(null);
   const [busy, setBusy] = useState(false);
   const [retiring, setRetiring] = useState<string | null>(null);
+  const [ra, setRa] = useState<Record<string, Reanswer>>({});
+  const [raBusy, setRaBusy] = useState<string | null>(null);
+
+  async function runReanswer(id: string) {
+    setRaBusy(id);
+    try {
+      const res = await reanswer(companyId, id);
+      setRa((m) => ({ ...m, [id]: res }));
+    } finally {
+      setRaBusy(null);
+    }
+  }
 
   async function run() {
     setBusy(true);
@@ -213,7 +225,11 @@ function KnowledgeCheckPanel({ companyId, docId }: { companyId: string; docId: s
     }
   }
 
-  const clean = chk?.verdict === "clean";
+  const tone = chk?.verdict === "clean" ? "var(--green)" : chk?.verdict === "regressions" ? "var(--red, #dc2626)" : "var(--amber)";
+  const banner =
+    chk?.verdict === "clean" ? "✓ Ready to publish — no conflicts, all governed evaluations pass"
+    : chk?.verdict === "regressions" ? `✗ Blocked — ${chk.regressions} knowledge regression(s) would ship`
+    : `⚠ Review needed — ${chk?.conflict_count} conflict(s) to resolve`;
   return (
     <section className="mb-5">
       <div className="mb-2 flex items-center justify-between">
@@ -232,14 +248,9 @@ function KnowledgeCheckPanel({ companyId, docId }: { companyId: string; docId: s
         <div className="card p-4">
           <div
             className="mb-3 flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold"
-            style={{
-              background: clean ? "color-mix(in srgb, var(--green) 12%, transparent)" : "color-mix(in srgb, var(--amber) 14%, transparent)",
-              color: clean ? "var(--green)" : "var(--amber)",
-            }}
+            style={{ background: `color-mix(in srgb, ${tone} 13%, transparent)`, color: tone }}
           >
-            {clean
-              ? "✓ Ready — no conflicts, all governed evaluations pass"
-              : `⚠ Review needed — ${chk.regressions} regression(s), ${chk.conflict_count} conflict(s)`}
+            {banner}
           </div>
 
           <div className="mb-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
@@ -262,10 +273,15 @@ function KnowledgeCheckPanel({ companyId, docId }: { companyId: string; docId: s
               <ul className="space-y-1">
                 {chk.eval.map((e, i) => (
                   <li key={i} className="flex items-start gap-2 text-sm">
-                    <span style={{ color: e.pass ? "var(--green)" : "var(--amber)" }}>{e.pass ? "✓" : "✗"}</span>
+                    <span style={{ color: e.pass ? "var(--green)" : "var(--red, #dc2626)" }}>{e.pass ? "✓" : "✗"}</span>
                     <span>
                       {e.question}
-                      {!e.pass && <span className="ml-1 text-xs text-muted-dim">— now: “{e.answer}”</span>}
+                      {!e.pass && (
+                        <span className="mt-0.5 block text-xs text-muted-dim">
+                          expected <b className="text-fg">{e.expected}</b> · now “{e.answer}”
+                          {e.cause && <><br />cause: {e.cause}</>}
+                        </span>
+                      )}
                     </span>
                   </li>
                 ))}
@@ -287,6 +303,40 @@ function KnowledgeCheckPanel({ companyId, docId }: { companyId: string; docId: s
                         {retiring === c.b.doc_id ? "Retiring…" : `Retire ${c.b.title}`}
                       </button>
                     </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {chk.stale_answer_count > 0 && (
+            <div className="mt-3">
+              <div className="mb-1 text-xs font-medium" style={{ color: "var(--amber)" }}>
+                ⚠ {chk.stale_answer_count} past answer{chk.stale_answer_count > 1 ? "s were" : " was"} based on an older version of this document
+              </div>
+              <ul className="space-y-2">
+                {chk.stale_answers.map((s) => (
+                  <li key={s.id} className="rounded-lg bg-surface-2 p-2 text-xs">
+                    <div className="flex items-start justify-between gap-2">
+                      <span>“{s.question}”</span>
+                      <button onClick={() => runReanswer(s.id)} disabled={raBusy === s.id} className="btn-ghost shrink-0 px-2 py-1 text-[11px]">
+                        {raBusy === s.id ? "Re-answering…" : ra[s.id] ? "Re-answer" : "Re-answer"}
+                      </button>
+                    </div>
+                    {ra[s.id] && (
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                        <div className="rounded bg-surface p-2">
+                          <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-dim">Old answer</div>
+                          {ra[s.id].old_answer}
+                        </div>
+                        <div className="rounded p-2" style={{ background: "color-mix(in srgb, var(--green) 10%, transparent)" }}>
+                          <div className="mb-1 text-[10px] uppercase tracking-wide" style={{ color: "var(--green)" }}>
+                            New answer {ra[s.id].changed ? "· changed" : "· unchanged"}
+                          </div>
+                          {ra[s.id].new_answer}
+                        </div>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>

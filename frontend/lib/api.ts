@@ -307,17 +307,29 @@ export interface GeneratedQuestions {
 
 export interface KnowledgeCheck {
   doc_id: string; title: string;
-  verdict: "clean" | "regressions";
+  verdict: "clean" | "conflicts" | "regressions";
   impact: number;
   impact_detail: { facts: number; related_docs: number; affected_questions: number; prior_versions: number };
   conflicts: ConflictPair[]; conflict_count: number;
-  eval: { question: string; pass: boolean; answer: string }[];
+  eval: { question: string; pass: boolean; answer: string; expected: string; cause?: string }[];
   regressions: number; eval_total: number;
+  stale_answers: { id: string; question: string; created_at: string | null }[];
+  stale_answer_count: number;
 }
 export async function knowledgeCheck(companyId: string, docId: string): Promise<KnowledgeCheck> {
   return j(await fetch(`${BASE}/knowledge/check`, {
     method: "POST", headers: { "Content-Type": "application/json", ...authHeader() },
     body: JSON.stringify({ company_id: companyId, doc_id: docId }),
+  }));
+}
+
+export interface Reanswer {
+  id: string; question: string; old_answer: string; new_answer: string; changed: boolean;
+}
+export async function reanswer(companyId: string, answerId: string): Promise<Reanswer> {
+  return j(await fetch(`${BASE}/answers/reanswer`, {
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeader() },
+    body: JSON.stringify({ company_id: companyId, answer_id: answerId }),
   }));
 }
 

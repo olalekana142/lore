@@ -166,6 +166,38 @@ def generate_questions(conn: kuzu.Connection, company_id: str, doc_id: str,
     return {"doc_id": doc_id, "title": doc["title"], "verified": verified, "rejected": rejected}
 
 
+# --------------------------------------------------------------- gap -> draft -> publish -> verify
+def publish_from_gap(conn: kuzu.Connection, company_id: str, question: str, title: str,
+                     text: str, groups: list[str] | None = None) -> dict:
+    """Publish a drafted document for a knowledge gap, then VERIFY the loop closed:
+
+    ingest the draft → re-ask the original gap question → confirm it now gets a grounded
+    answer citing the new doc → seed evidence-verified eval questions from it → report the
+    remaining gap count. This is the create-knowledge half of the loop (not just maintain).
+    """
+    from lore.analytics import knowledge_gaps
+    from lore.ingestion.pipeline import ingest_text
+    from lore.retrieval.answer import retrieve, synthesize
+
+    summary = ingest_text(company_id, title, text)
+    doc_ids = summary.get("doc_ids", [])
+    new_id = doc_ids[0] if doc_ids else None
+
+    # Did publishing actually answer the original question?
+    ans = synthesize(question, retrieve(conn, company_id, question, groups=groups))
+    cited = {s["doc_id"] for s in ans["sources"]}
+    closed = ans["confidence"] != "none" and (new_id in cited if new_id else bool(cited))
+
+    gen = generate_questions(conn, company_id, new_id, groups=groups, k=3) if new_id else None
+    return {
+        "doc_id": new_id, "title": title, "closed": closed,
+        "answer": ans["answer"], "sources": ans["sources"], "confidence": ans["confidence"],
+        "verified_questions": [q["question"] for q in (gen["verified"] if gen else [])],
+        "facts_extracted": summary.get("facts_extracted", 0),
+        "remaining_gaps": len(knowledge_gaps(conn, company_id, limit=1000)),
+    }
+
+
 # --------------------------------------------------------------- Knowledge Change Management
 def knowledge_check(conn: kuzu.Connection, company_id: str, doc_id: str,
                     groups: list[str] | None = None) -> dict | None:

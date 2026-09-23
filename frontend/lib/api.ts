@@ -459,10 +459,22 @@ export async function draftGapAnswer(companyId: string, question: string): Promi
   return j(
     await fetch(`${BASE}/gaps/draft`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeader() },
       body: JSON.stringify({ company_id: companyId, question }),
     }),
   );
+}
+
+export interface GapPublish {
+  doc_id: string | null; title: string; closed: boolean;
+  answer: string; sources: Source[]; confidence: Confidence;
+  verified_questions: string[]; facts_extracted: number; remaining_gaps: number;
+}
+export async function publishFromGap(companyId: string, question: string, title: string, text: string): Promise<GapPublish> {
+  return j(await fetch(`${BASE}/gaps/publish`, {
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeader() },
+    body: JSON.stringify({ company_id: companyId, question, title, text }),
+  }));
 }
 
 export async function ingestText(companyId: string, title: string, text: string): Promise<IngestSummary> {

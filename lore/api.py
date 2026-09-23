@@ -392,6 +392,23 @@ def ingest_text_doc(req: TextRequest, authorization: str | None = Header(None)) 
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+class GapPublishRequest(BaseModel):
+    company_id: str
+    question: str
+    title: str
+    text: str
+
+
+@app.post("/gaps/publish")
+def gap_publish(req: GapPublishRequest, authorization: str | None = Header(None)) -> dict:
+    """Publish a drafted doc for a gap, then verify the gap closed + seed eval questions. Editor+."""
+    cid, groups, _ = _require(authorization, "editor")
+    try:
+        return knowledge.publish_from_gap(_db(), cid, req.question, req.title, req.text, groups=groups)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 class SupersedeRequest(BaseModel):
     company_id: str
     doc_id: str

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { getGaps, draftGapAnswer, ingestText, getEscalations, resolveEscalation, type Gap, type Escalation } from "@/lib/api";
+import { getGaps, draftGapAnswer, publishFromGap, getEscalations, resolveEscalation, type Gap, type Escalation, type GapPublish } from "@/lib/api";
 import { useCompany } from "@/lib/useCompany";
 import { relativeDate } from "@/lib/format";
 import { PageHeader, EmptyState, ErrorNote } from "../components/ui";
@@ -128,7 +128,7 @@ function GapRow({ gap, companyId, delay, onClosed }: { gap: Gap; companyId: stri
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [result, setResult] = useState<GapPublish | null>(null);
 
   async function draft() {
     setDrafting(true);
@@ -148,9 +148,9 @@ function GapRow({ gap, companyId, delay, onClosed }: { gap: Gap; companyId: stri
     if (!title.trim() || !text.trim()) return;
     setSaving(true);
     try {
-      await ingestText(companyId, title, text);
-      setSaved(true);
-      setTimeout(onClosed, 900); // reload → gap should drop off once answerable
+      const r = await publishFromGap(companyId, gap.question, title, text);
+      setResult(r);
+      setTimeout(onClosed, 2500); // reload → gap drops off once answerable
     } finally {
       setSaving(false);
     }
@@ -183,10 +183,34 @@ function GapRow({ gap, companyId, delay, onClosed }: { gap: Gap; companyId: stri
               <span className="dot" /><span className="dot" /><span className="dot" />
               <span className="ml-1">Drafting a doc to answer this…</span>
             </div>
-          ) : saved ? (
-            <p className="text-sm font-medium" style={{ color: "var(--green)" }}>
-              ✓ Published — this gap will close once the new doc is indexed.
-            </p>
+          ) : result ? (
+            <div className="animate-scale-in text-sm">
+              <p className="font-semibold" style={{ color: result.closed ? "var(--green)" : "var(--amber)" }}>
+                {result.closed
+                  ? "✓ Gap closed — this question now gets a grounded, cited answer"
+                  : "⚠ Published, but the question still isn't fully answered — add more detail to the draft"}
+              </p>
+              {result.closed && (
+                <div className="mt-2 rounded-lg bg-surface-2 p-3 text-xs">
+                  <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-dim">Verified answer now</div>
+                  <div>{result.answer.slice(0, 240)}</div>
+                </div>
+              )}
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-dim">
+                <span>{result.facts_extracted} facts extracted</span>
+                {result.verified_questions.length > 0 && (
+                  <span>{result.verified_questions.length} eval question{result.verified_questions.length > 1 ? "s" : ""} seeded</span>
+                )}
+                <span>knowledge gaps remaining: <b className="text-fg">{result.remaining_gaps}</b></span>
+              </div>
+              {result.verified_questions.length > 0 && (
+                <ul className="mt-1.5 space-y-0.5 text-xs text-muted">
+                  {result.verified_questions.map((q, i) => (
+                    <li key={i} className="flex items-start gap-1.5"><span style={{ color: "var(--green)" }}>✓</span>{q}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
           ) : (
             <>
               <label className="text-xs font-semibold uppercase tracking-wide text-muted-dim">Draft title</label>
@@ -196,7 +220,7 @@ function GapRow({ gap, companyId, delay, onClosed }: { gap: Gap; companyId: stri
               <p className="mt-1.5 text-xs text-muted-dim">AI-drafted from the question — edit and fill any [placeholders] before publishing.</p>
               <div className="mt-3 flex gap-2">
                 <button onClick={save} disabled={saving} className="btn-primary px-4 py-2 text-sm">
-                  {saving ? "Publishing…" : "Publish as document"}
+                  {saving ? "Publishing & verifying…" : "Publish & verify"}
                 </button>
                 <button onClick={() => setOpen(false)} className="btn-ghost px-4 py-2 text-sm">Cancel</button>
               </div>

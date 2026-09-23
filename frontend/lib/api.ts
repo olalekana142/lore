@@ -333,6 +333,19 @@ export async function knowledgeCheck(companyId: string, docId: string): Promise<
   }));
 }
 
+export type AlertSeverity = "critical" | "review" | "gap" | "info";
+export interface KnowledgeAlert {
+  severity: AlertSeverity; kind: string; title: string; detail: string; href: string;
+}
+export interface Alerts {
+  alerts: KnowledgeAlert[];
+  counts: Record<AlertSeverity, number>;
+  total: number;
+}
+export async function getAlerts(companyId: string): Promise<Alerts> {
+  return j(await fetch(`${BASE}/alerts?${qs({ company_id: companyId })}`, { headers: authHeader() }));
+}
+
 export interface Challenge {
   question: string; answer: string;
   verdict: "survives" | "contested" | "unchallenged" | "no_answer";

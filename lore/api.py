@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from lore import actions, analytics, auth, challenge, escalations, feedback, glossary, health, knowledge, onboarding, provenance
+from lore import actions, alerts as alerts_mod, analytics, auth, challenge, escalations, feedback, glossary, health, knowledge, onboarding, provenance
 from lore.config import settings
 from lore.graph import queries
 from lore.graph.schema import get_connection, init_schema
@@ -434,6 +434,13 @@ def set_canonical(req: CanonicalRequest, authorization: str | None = Header(None
     _require(authorization, "admin")
     analytics.set_canonical(_db(), req.doc_id, req.canonical)
     return {"ok": True, "canonical": req.canonical}
+
+
+@app.get("/alerts")
+def get_alerts(company_id: str, authorization: str | None = Header(None)) -> dict:
+    """Proactive prioritised alerts (conflicts, stale, unowned, gaps, unused). Editor+."""
+    cid, groups, _ = _require(authorization, "editor")
+    return alerts_mod.alerts(_db(), cid, groups=groups)
 
 
 @app.get("/audit")

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { getOverview, listUsers, type Overview, type ManagedUser } from "@/lib/api";
+import { getOverview, listUsers, getAlerts, type Overview, type ManagedUser, type Alerts, type AlertSeverity } from "@/lib/api";
 import { relativeDate } from "@/lib/format";
 import { StatTile, ErrorNote } from "./ui";
 import { IconChat, IconUpload, IconGap, IconClock, IconArrow, IconUsers } from "./icons";
@@ -10,7 +10,10 @@ import { IconChat, IconUpload, IconGap, IconClock, IconArrow, IconUsers } from "
 export default function OpsDashboard({ companyId, role }: { companyId: string; role: string }) {
   const [data, setData] = useState<Overview | null>(null);
   const [users, setUsers] = useState<ManagedUser[] | null>(null);
+  const [alerts, setAlerts] = useState<Alerts | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => { getAlerts(companyId).then(setAlerts).catch(() => {}); }, [companyId]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -54,6 +57,8 @@ export default function OpsDashboard({ companyId, role }: { companyId: string; r
           <Link href="/admin" className="ml-auto text-xs font-medium text-accent hover:underline">Manage users →</Link>
         </div>
       )}
+
+      {alerts && alerts.total > 0 && <AlertsCard alerts={alerts} />}
 
       {!data && !error && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -130,6 +135,45 @@ export default function OpsDashboard({ companyId, role }: { companyId: string; r
         </>
       )}
     </div>
+  );
+}
+
+const SEV: Record<AlertSeverity, { dot: string; label: string }> = {
+  critical: { dot: "var(--red)", label: "Critical" },
+  review: { dot: "var(--amber)", label: "Review" },
+  gap: { dot: "#d4a017", label: "Gap" },
+  info: { dot: "var(--muted)", label: "Info" },
+};
+
+function AlertsCard({ alerts }: { alerts: Alerts }) {
+  return (
+    <section className="animate-fade-up mb-3 card p-5">
+      <div className="mb-2.5 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-sm font-bold">
+          <IconClock size={16} /> Knowledge alerts
+        </h2>
+        <div className="flex items-center gap-2 text-xs">
+          {(Object.keys(SEV) as AlertSeverity[]).filter((s) => alerts.counts[s] > 0).map((s) => (
+            <span key={s} className="inline-flex items-center gap-1 text-muted-dim">
+              <span className="inline-block h-2 w-2 rounded-full" style={{ background: SEV[s].dot }} />
+              {alerts.counts[s]} {SEV[s].label.toLowerCase()}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="divide-y divide-border-soft">
+        {alerts.alerts.map((a, i) => (
+          <Link key={i} href={a.href} className="flex items-start gap-3 py-2.5 transition-colors hover:bg-surface-2 -mx-2 px-2 rounded-md">
+            <span className="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: SEV[a.severity].dot }} />
+            <span className="min-w-0">
+              <span className="block text-sm font-medium">{a.title}</span>
+              <span className="block text-xs text-muted-dim">{a.detail}</span>
+            </span>
+            <span className="ml-auto self-center text-muted-dim"><IconArrow size={14} /></span>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
 

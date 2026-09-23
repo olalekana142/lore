@@ -76,10 +76,13 @@ def main() -> None:
         "MATCH (d:Document {id:'upload:employee-faq'}) SET d.effective_to=$t, d.authority=30",
         {"t": datetime(2026, 7, 31)},
     )
-    for doc_id, auth in [("upload:pto-policy", 95), ("upload:security-incident", 90),
+    for doc_id, auth in [("upload:security-incident", 90),
                          ("manual:compensation-bands-2026", 85)]:
         conn.execute("MATCH (d:Document {id:$id}) SET d.authority=$a", {"id": doc_id, "a": auth})
-    print("[seed] temporal: FAQ superseded (2026-07-31); authorities set")
+    # Canonical: the PTO policy is the designated authoritative source for PTO (wins over the
+    # legacy FAQ in retrieval + conflict resolution).
+    analytics.set_canonical(conn, "upload:pto-policy", True)
+    print("[seed] temporal: FAQ superseded (2026-07-31); authorities set; PTO policy canonical")
 
     # Permissions demo: an HR-only document + a few users in different groups.
     from lore import auth

@@ -56,13 +56,13 @@ def _active_facts(conn: kuzu.Connection, company_id: str, groups: list[str] | No
     res = conn.execute(
         """MATCH (c:Company {id:$cid})-[:OWNS]->(d:Document)-[:STATES]->(f:Fact)
            RETURN f.id, f.statement, f.embedding, d.id, d.title, d.audience,
-                  d.updated_at, d.authority, d.verified_at, d.effective_to""",
+                  d.updated_at, d.authority, d.verified_at, d.effective_to, d.canonical""",
         {"cid": company_id},
     )
     now = datetime.now()
     out: list[dict] = []
     while res.has_next():
-        fid, statement, emb, did, title, audience, updated_at, authority, verified_at, eff_to = res.get_next()
+        fid, statement, emb, did, title, audience, updated_at, authority, verified_at, eff_to, canonical = res.get_next()
         if not emb:
             continue
         if groups is not None and not can_see(audience, groups):
@@ -70,7 +70,7 @@ def _active_facts(conn: kuzu.Connection, company_id: str, groups: list[str] | No
         out.append({
             "fact_id": fid, "statement": statement, "emb": emb, "doc_id": did, "title": title,
             "updated_at": updated_at, "authority": authority or 60,
-            "verified": verified_at is not None,
+            "verified": verified_at is not None, "canonical": bool(canonical),
             "superseded": bool(eff_to and eff_to < now),
         })
     return out
@@ -81,16 +81,20 @@ def _side(f: dict) -> dict:
         "statement": f["statement"], "doc_id": f["doc_id"], "title": f["title"],
         "updated_at": f["updated_at"].isoformat() if f.get("updated_at") else None,
         "authority": f["authority"], "verified": f["verified"], "superseded": f["superseded"],
+        "canonical": f.get("canonical", False),
     }
 
 
 def _recommend(a: dict, b: dict) -> dict:
-    """Pick the authoritative side of a conflict: current > higher authority > newer > verified."""
+    """Pick the authoritative side of a conflict: canonical > current > higher authority >
+    newer > verified."""
     def key(x):
-        return (0 if x["superseded"] else 1, x["authority"],
+        return (int(x.get("canonical", False)), 0 if x["superseded"] else 1, x["authority"],
                 x["updated_at"].timestamp() if x.get("updated_at") else 0, int(x["verified"]))
     winner, loser = (a, b) if key(a) >= key(b) else (b, a)
     bits = []
+    if winner.get("canonical") and not loser.get("canonical"):
+        bits.append("the canonical source")
     if loser["superseded"] and not winner["superseded"]:
         bits.append("the other is superseded")
     if winner["authority"] > loser["authority"]:

@@ -185,6 +185,7 @@ function WhyPanel({ sources }: { sources: Source[] }) {
   const verified = sources.filter((s) => s.verified).length;
   const owners = Array.from(new Set(sources.map((s) => s.owner).filter(Boolean)));
   const maxAuth = Math.max(...sources.map((s) => s.authority ?? 60));
+  const canonical = sources.some((s) => s.canonical);
   const freshest = sources.map((s) => s.updated_at).filter(Boolean).sort().reverse()[0] as string | undefined;
 
   const Row = ({ ok, children }: { ok: boolean; children: React.ReactNode }) => (
@@ -207,6 +208,7 @@ function WhyPanel({ sources }: { sources: Source[] }) {
         </Row>
         <Row ok={sources.length >= 1}>{sources.length === 1 ? "1 source" : `${sources.length} independent sources`} cited</Row>
         <Row ok={maxAuth >= 60}>Highest authority: <b className="font-semibold">{authorityTier(maxAuth)}</b></Row>
+        {canonical && <Row ok={true}>Backed by the <b className="font-semibold">authoritative source</b> for this topic</Row>}
         {freshest && <Row ok={true}>Freshest source updated {relativeDate(freshest)}</Row>}
       </ul>
       <p className="mt-2.5 border-t border-border-soft pt-2.5 text-xs text-muted-dim">

@@ -57,7 +57,7 @@ def retrieve(conn: kuzu.Connection, company_id: str, question: str,
         """MATCH (c:Company {id:$cid})-[:OWNS]->(d:Document)-[:STATES]->(f:Fact)
            RETURN f.id, f.statement, f.embedding,
                   d.id, d.title, d.url, d.updated_at, d.version, d.owner, d.verified_at,
-                  d.audience, d.effective_from, d.effective_to, d.authority""",
+                  d.audience, d.effective_from, d.effective_to, d.authority, d.canonical""",
         {"cid": company_id},
     )
     now = datetime.now()
@@ -68,7 +68,7 @@ def retrieve(conn: kuzu.Connection, company_id: str, question: str,
     cand: list[dict] = []
     while res.has_next():
         (fid, statement, emb, did, title, url, updated_at, version, owner, verified_at,
-         audience, eff_from, eff_to, authority) = res.get_next()
+         audience, eff_from, eff_to, authority, canonical) = res.get_next()
         if not emb or not can_see(audience, groups):
             continue
         cand.append(
@@ -80,8 +80,9 @@ def retrieve(conn: kuzu.Connection, company_id: str, question: str,
                 "version": version, "owner": owner or None,
                 "verified": bool(verified_at and verified_at >= verify_cutoff),
                 "_eff_from": eff_from, "_eff_to": eff_to, "_authority": authority or 60,
+                "_canonical": bool(canonical),
                 "current": not is_superseded(eff_to, now),
-                "authority": authority or 60,
+                "authority": authority or 60, "canonical": bool(canonical),
                 "effective_from": eff_from.isoformat() if eff_from else None,
                 "effective_to": eff_to.isoformat() if eff_to else None,
             }
@@ -111,7 +112,9 @@ def retrieve(conn: kuzu.Connection, company_id: str, question: str,
     scores: dict[int, float] = {}
     for i, c in enumerate(cand):
         c["_superseded"] = as_of is None and is_superseded(c["_eff_to"], now)
-        factor = (0.25 if c["_superseded"] else 1.0) * (1 + c["_authority"] / 1000.0)
+        # canonical (designated source of truth) gets a decisive boost over supporting docs
+        canon = 1.4 if c["_canonical"] else 1.0
+        factor = (0.25 if c["_superseded"] else 1.0) * (1 + c["_authority"] / 1000.0) * canon
         scores[i] = base.get(i, 0.0) * factor
     order = sorted(range(len(cand)), key=lambda i: scores.get(i, 0.0), reverse=True)
 
@@ -138,7 +141,7 @@ def retrieve(conn: kuzu.Connection, company_id: str, question: str,
                     "n": len(sources) + 1, "doc_id": f["doc_id"], "title": f["title"],
                     "url": f["url"] or None, "updated_at": f["updated_at"],
                     "version": f["version"], "owner": f["owner"], "verified": f["verified"],
-                    "current": f["current"], "authority": f["authority"],
+                    "current": f["current"], "authority": f["authority"], "canonical": f["canonical"],
                     "effective_from": f["effective_from"], "effective_to": f["effective_to"],
                     "facts": [],
                 }

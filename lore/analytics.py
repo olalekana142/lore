@@ -375,12 +375,12 @@ def get_document(conn: kuzu.Connection, company_id: str, doc_id: str,
     res = conn.execute(
         """MATCH (c:Company {id:$cid})-[:OWNS]->(d:Document {id:$did})
            RETURN d.title, d.source, d.url, d.text, d.version, d.updated_at,
-                  d.owner, d.verified_at, d.audience""",
+                  d.owner, d.verified_at, d.audience, d.canonical, d.authority""",
         {"cid": company_id, "did": doc_id},
     )
     if not res.has_next():
         return None
-    title, source, url, text, version, updated_at, owner, verified_at, audience = res.get_next()
+    title, source, url, text, version, updated_at, owner, verified_at, audience, canonical, authority = res.get_next()
     if not can_see(audience, groups):
         return None
     cutoff = datetime.now() - timedelta(days=settings.review_days)
@@ -403,6 +403,7 @@ def get_document(conn: kuzu.Connection, company_id: str, doc_id: str,
         "verified": bool(verified_at and verified_at >= cutoff),
         "verified_at": verified_at.isoformat() if verified_at else None,
         "audience": audience or ["everyone"],
+        "canonical": bool(canonical), "authority": authority or 60,
         "facts": facts, "topics": topics,
     }
 
@@ -416,6 +417,19 @@ def set_audience(conn: kuzu.Connection, doc_id: str, audience: list[str]) -> Non
     """Set which groups can see a document ('everyone' = public)."""
     aud = audience or ["everyone"]
     conn.execute("MATCH (d:Document {id:$id}) SET d.audience=$aud", {"id": doc_id, "aud": aud})
+
+
+def set_canonical(conn: kuzu.Connection, doc_id: str, canonical: bool) -> None:
+    """Mark a document as the authoritative (canonical) source for its topics, or unmark it.
+
+    Canonical docs get top authority (100) so retrieval and conflict resolution favour them
+    over supporting/legacy sources; unmarking returns authority to the default (60). Reduces
+    knowledge sprawl: one designated source of truth wins over years of duplicated docs.
+    """
+    conn.execute(
+        "MATCH (d:Document {id:$id}) SET d.canonical=$c, d.authority=$a",
+        {"id": doc_id, "c": bool(canonical), "a": 100 if canonical else 60},
+    )
 
 
 # ---------------------------------------------------------------------- helpers

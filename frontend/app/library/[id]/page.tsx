@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
   getDocument, verifyDocument, setAudience,
-  getImpact, getHistory, getDiff, generateQuestions, knowledgeCheck, supersedeDocument, reanswer,
+  getImpact, getHistory, getDiff, generateQuestions, knowledgeCheck, supersedeDocument, reanswer, setCanonical,
   type DocDetail, type Impact, type History, type GeneratedQuestions, type KnowledgeCheck, type Reanswer,
 } from "@/lib/api";
 import { useCompany } from "@/lib/useCompany";
@@ -348,6 +348,35 @@ function KnowledgeCheckPanel({ companyId, docId }: { companyId: string; docId: s
   );
 }
 
+function CanonicalBar({ doc, companyId, onDone }: { doc: DocDetail; companyId: string; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  async function toggle() {
+    setBusy(true);
+    try {
+      await setCanonical(companyId, doc.doc_id, !doc.canonical);
+      onDone();
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="mb-1 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface-2 p-3">
+      {doc.canonical ? (
+        <span className="inline-flex items-center gap-1.5 text-sm font-medium" style={{ color: "var(--accent)" }}>
+          ★ Authoritative source for its topics — retrieval and conflict resolution favour it
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-1.5 text-sm text-muted">
+          Supporting source — not designated authoritative
+        </span>
+      )}
+      <button onClick={toggle} disabled={busy} className="ml-auto btn-ghost px-3 py-1.5 text-sm">
+        {busy ? "Saving…" : doc.canonical ? "Remove as canonical" : "Make canonical source"}
+      </button>
+    </div>
+  );
+}
+
 function VerifyBar({ doc, companyId, onDone }: { doc: DocDetail; companyId: string; onDone: () => void }) {
   const [owner, setOwner] = useState(doc.owner ?? "");
   const [busy, setBusy] = useState(false);
@@ -395,6 +424,7 @@ export default function DocumentPage() {
   const [companyId, , ready] = useCompany();
   const { user } = useAuth();
   const canEdit = atLeast(user?.role, "editor");
+  const isAdmin = atLeast(user?.role, "admin");
   const [doc, setDoc] = useState<DocDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
@@ -447,6 +477,11 @@ export default function DocumentPage() {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-bold tracking-tight">{doc.title}</h1>
               <span className="chip">v{doc.version}</span>
+              {doc.canonical && (
+                <span className="chip" style={{ background: "color-mix(in srgb, var(--accent) 16%, transparent)", color: "var(--accent)" }}>
+                  ★ Authoritative source
+                </span>
+              )}
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-dim">
               <span>updated {relativeDate(doc.updated_at)}</span>
@@ -467,6 +502,7 @@ export default function DocumentPage() {
             <>
               <VerifyBar doc={doc} companyId={companyId} onDone={load} />
               <AudienceBar doc={doc} companyId={companyId} onDone={load} />
+              {isAdmin && <CanonicalBar doc={doc} companyId={companyId} onDone={load} />}
             </>
           ) : (
             <div className="mb-1 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface-2 p-3 text-sm">

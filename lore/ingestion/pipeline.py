@@ -93,7 +93,7 @@ def store_document(conn: kuzu.Connection, doc: Document, seen_facts: dict[str, l
     conn.execute(
         """MERGE (d:Document {id: $id})
            ON CREATE SET d.cited_count = 0, d.audience = ['everyone'],
-                         d.effective_to = NULL, d.authority = 60
+                         d.effective_to = NULL, d.authority = 60, d.canonical = false
            SET d.title=$title, d.source=$source, d.url=$url,
                d.text=$text, d.version=$version, d.updated_at=$updated,
                d.effective_from=$updated""",

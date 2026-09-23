@@ -29,6 +29,7 @@ export interface Source {
   verified: boolean;
   current: boolean;
   authority: number;
+  canonical?: boolean;
   effective_from: string | null;
   effective_to: string | null;
   facts: string[];
@@ -72,6 +73,15 @@ export interface DocSummary {
 export interface DocDetail extends Omit<DocSummary, "facts"> {
   text: string;
   facts: string[];
+  canonical?: boolean;
+  authority?: number;
+}
+
+export async function setCanonical(companyId: string, docId: string, canonical: boolean): Promise<void> {
+  await fetch(`${BASE}/documents/canonical`, {
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeader() },
+    body: JSON.stringify({ company_id: companyId, doc_id: docId, canonical }),
+  });
 }
 
 export interface Escalation {

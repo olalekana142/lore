@@ -405,6 +405,20 @@ def supersede_document(req: SupersedeRequest, authorization: str | None = Header
     return {"ok": True}
 
 
+class CanonicalRequest(BaseModel):
+    company_id: str
+    doc_id: str
+    canonical: bool = True
+
+
+@app.post("/documents/canonical")
+def set_canonical(req: CanonicalRequest, authorization: str | None = Header(None)) -> dict:
+    """Designate (or clear) a document as the authoritative source for its topics. Admin only."""
+    _require(authorization, "admin")
+    analytics.set_canonical(_db(), req.doc_id, req.canonical)
+    return {"ok": True, "canonical": req.canonical}
+
+
 @app.get("/audit")
 def audit(company_id: str, authorization: str | None = Header(None)) -> dict:
     """Knowledge-quality scorecard (editor+). Fast; conflict counts come from /content-health."""

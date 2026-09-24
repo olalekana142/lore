@@ -11,29 +11,29 @@ import {
 } from "../components/icons";
 
 const FEATURES = [
-  { Icon: IconChat, tag: "Answer", title: "Cited answers, streamed", body: "Ask in plain English; get a synthesized answer that streams in and cites the exact documents it used." },
-  { Icon: IconShieldCheck, tag: "Answer", title: "Why this answer — & Challenge it", body: "Every answer shows its evidence. Hit Challenge and Lore adversarially hunts for contradicting facts, then tells you whether the answer survives." },
-  { Icon: IconUsers, tag: "Answer", title: "Permission-aware", body: "Roles and per-doc audiences mean people only ever see — and get cited — what they're allowed to." },
-  { Icon: IconHealth, tag: "Audit", title: "Conflicts → canonical source", body: "Flags contradictory policies and resolves them: designate one authoritative source of truth and it wins in retrieval and conflicts." },
-  { Icon: IconAlert, tag: "Audit", title: "Proactive alerts", body: "One prioritized feed — conflicts, stale docs, missing owners, outdated answers, unmet demand. Problems find you." },
-  { Icon: IconSearch, tag: "Audit", title: "Ambiguity detection", body: "Probes a policy with the edge-case questions a careful reader would ask — and flags the ones it doesn't clearly answer." },
-  { Icon: IconClock, tag: "Change", title: "Versioned & impact-aware", body: "Every change is versioned with a plain-English “what changed”, and Lore shows exactly what a change will affect before you publish." },
-  { Icon: IconCheck, tag: "Change", title: "A publishing gate", body: "Publishing re-runs impact, conflict detection and the evaluation cases a document governs — a knowledge regression blocks the change." },
-  { Icon: IconSparkle, tag: "Improve", title: "Self-healing knowledge", body: "Turn an unanswered question into a verified, cited doc — and re-answer the past answers a change quietly made stale." },
+  { Icon: IconChat, tag: "Ask", title: "Answers in seconds", body: "Anyone can ask a question in plain English and get a clear answer — no training, no digging through shared drives." },
+  { Icon: IconShieldCheck, tag: "Trust", title: "Answers you can trust", body: "Every answer shows the exact document it came from, so your team can act with confidence instead of second-guessing." },
+  { Icon: IconUsers, tag: "Trust", title: "The right people, the right answers", body: "Sensitive policies stay private. People only ever get answers from the documents their role is allowed to see." },
+  { Icon: IconHealth, tag: "Trust", title: "One source of truth", body: "When two documents disagree, Lore catches it and points everyone to the official, up-to-date version." },
+  { Icon: IconAlert, tag: "Trust", title: "Nothing slips through the cracks", body: "Lore quietly watches for outdated, unowned or missing information and flags it before it causes confusion." },
+  { Icon: IconSearch, tag: "Trust", title: "Finds the gaps you missed", body: "It asks the tricky follow-up questions your team will — and shows you where your policies don't have an answer yet." },
+  { Icon: IconClock, tag: "Stay current", title: "Always up to date", body: "Update a policy once and every answer reflects it instantly — with a plain-English summary of what changed." },
+  { Icon: IconCheck, tag: "Stay current", title: "Change with confidence", body: "Before an update goes live, Lore checks it won't quietly break the answers your team already relies on." },
+  { Icon: IconSparkle, tag: "Improve", title: "Gets better on its own", body: "The questions people keep asking become new, verified answers — your knowledge base fills its own gaps over time." },
 ];
 
 const LOOP = [
-  { Icon: IconChat, title: "Answer", body: "grounded · cited · challengeable" },
-  { Icon: IconHealth, title: "Audit", body: "gaps · conflicts · staleness · alerts" },
-  { Icon: IconClock, title: "Change", body: "versions · impact · regressions" },
-  { Icon: IconSparkle, title: "Improve", body: "gap → draft → publish" },
-  { Icon: IconShieldCheck, title: "Re-evaluate", body: "stale answers → re-answer" },
+  { Icon: IconChat, title: "Answer", body: "clear, sourced answers in seconds" },
+  { Icon: IconHealth, title: "Check", body: "spots gaps, conflicts & stale info" },
+  { Icon: IconClock, title: "Keep current", body: "one update, reflected everywhere" },
+  { Icon: IconSparkle, title: "Improve", body: "turns questions into answers" },
+  { Icon: IconShieldCheck, title: "Stay honest", body: "revisits old answers when things change" },
 ];
 
 const STEPS = [
-  { n: "01", title: "Connect your docs", body: "Upload policies, SOPs, wikis and FAQs — or sync a Google Drive folder. PDF, DOCX, Markdown, CSV." },
-  { n: "02", title: "Lore builds a graph", body: "It extracts atomic facts, links them to topics, versions and sources, and embeds everything for retrieval." },
-  { n: "03", title: "Your team just asks", body: "Every answer is grounded, cited, permission-scoped, and always reflects the latest verified version." },
+  { n: "01", title: "Add your documents", body: "Upload your handbooks, policies and how-tos — or connect a Google Drive folder. PDFs, Word, anything." },
+  { n: "02", title: "Lore learns them", body: "It reads and organizes everything, so it understands how your policies connect — no setup or tagging needed." },
+  { n: "03", title: "Your team just asks", body: "Everyone gets clear, sourced answers that always reflect your latest documents — from day one." },
 ];
 
 export default function Welcome() {
@@ -76,16 +76,15 @@ export default function Welcome() {
         <div className="mx-auto max-w-6xl px-5 pb-16 pt-16 md:pt-24">
           <div className="mx-auto max-w-3xl text-center">
             <div className="animate-fade-up mb-5 inline-flex items-center gap-2 rounded-full border border-border bg-surface/70 px-3 py-1 text-xs text-muted backdrop-blur">
-              <span className="h-1.5 w-1.5 rounded-full bg-green" /> GraphRAG knowledge base for your company
+              <span className="h-1.5 w-1.5 rounded-full bg-green" /> One place for every company answer
             </div>
             <h1 className="animate-fade-up text-4xl font-bold leading-[1.05] tracking-tight md:text-6xl" style={{ animationDelay: "60ms" }}>
-              Your company&apos;s knowledge,
-              <br className="hidden md:block" /> <span className="gradient-text">continuously verified.</span>
+              Every company answer,
+              <br className="hidden md:block" /> <span className="gradient-text">that your team can trust.</span>
             </h1>
             <p className="animate-fade-up mx-auto mt-5 max-w-xl text-lg text-muted" style={{ animationDelay: "120ms" }}>
-              Lore turns your policies, wikis and SOPs into a knowledge base anyone can just ask — with cited answers it can
-              defend, a graph that catches what&apos;s stale, conflicting or missing, and a publishing gate that keeps every
-              change honest.
+              Lore turns your handbooks, policies and how-tos into one place your whole team can just ask — and get a clear,
+              trustworthy answer in seconds. No more digging through drives or pinging colleagues. Works for teams of 5 or 5,000.
             </p>
             <div className="animate-fade-up mt-8 flex flex-wrap justify-center gap-3" style={{ animationDelay: "180ms" }}>
               <Link href="/login" className="btn-primary flex items-center gap-2 px-6 py-3 text-sm">
@@ -121,13 +120,13 @@ export default function Welcome() {
                       <span className="text-sm font-semibold">Paid Time Off Policy</span>
                       <span className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium text-green"><IconCheck size={12} /> Verified · HR Team</span>
                     </div>
-                    <div className="mt-1 pl-7 text-[11px] text-muted-dim">v2 · updated 2 weeks ago · ★ authoritative source</div>
+                    <div className="mt-1 pl-7 text-[11px] text-muted-dim">Updated 2 weeks ago · the official HR policy</div>
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
                     <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium" style={{ background: "color-mix(in srgb, var(--green) 14%, transparent)", color: "var(--green)" }}>
-                      <IconShieldCheck size={11} /> Survives challenge
+                      <IconShieldCheck size={11} /> Double-checked
                     </span>
-                    <span className="text-muted-dim">legacy “20 days” claim found &amp; beaten as superseded</span>
+                    <span className="text-muted-dim">an older doc still said 20 — Lore used the current one</span>
                   </div>
                 </div>
               </div>
@@ -139,7 +138,7 @@ export default function Welcome() {
       {/* Stats */}
       <section className="border-y border-border bg-surface/40">
         <div className="mx-auto grid max-w-4xl grid-cols-2 gap-6 px-5 py-10 text-center md:grid-cols-4">
-          {[["Cited & defensible", "every answer"], ["Self-auditing", "conflicts · gaps · staleness"], ["Change-managed", "versions · impact · regressions"], ["Self-healing", "gap → draft → verify"]].map(([a, b]) => (
+          {[["Answers in seconds", "not hours of searching"], ["Always current", "never an outdated answer"], ["Private by design", "the right people only"], ["Trusted", "every answer is sourced"]].map(([a, b]) => (
             <div key={a}>
               <div className="text-lg font-bold gradient-text">{a}</div>
               <div className="mt-1 text-xs text-muted">{b}</div>
@@ -151,8 +150,8 @@ export default function Welcome() {
       {/* The loop */}
       <section className="mx-auto max-w-6xl px-5 pt-20">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight md:text-4xl">Not a chatbot. <span className="gradient-text">A knowledge loop.</span></h2>
-          <p className="mt-4 text-muted">Lore doesn&apos;t just answer — it audits its own knowledge, manages every change, fills its own gaps, and re-checks past answers when the source moves.</p>
+          <h2 className="text-3xl font-bold tracking-tight md:text-4xl">Not just a chatbot. <span className="gradient-text">A knowledge base that looks after itself.</span></h2>
+          <p className="mt-4 text-muted">Most tools answer and stop there. Lore keeps your knowledge healthy — spotting what&apos;s out of date, keeping every change in sync, and filling the gaps your team keeps running into.</p>
         </div>
         <div className="mt-12 flex flex-wrap items-stretch justify-center gap-3">
           {LOOP.map((s, i) => (
@@ -166,14 +165,14 @@ export default function Welcome() {
             </div>
           ))}
         </div>
-        <p className="mt-6 text-center text-xs text-muted-dim">…then repeat. Every generated artifact stays traceable to the exact knowledge state it came from.</p>
+        <p className="mt-6 text-center text-xs text-muted-dim">…and repeat — so the answers your team relies on stay right, without anyone babysitting them.</p>
       </section>
 
       {/* Features */}
       <section id="features" className="mx-auto max-w-6xl px-5 py-20">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight md:text-4xl">More than search. <span className="gradient-text">Understanding.</span></h2>
-          <p className="mt-4 text-muted">Most tools do flat lookup over your files. Lore reasons across them — because your knowledge is a graph, not a pile of documents.</p>
+          <h2 className="text-3xl font-bold tracking-tight md:text-4xl">Everything your team needs to <span className="gradient-text">stop guessing.</span></h2>
+          <p className="mt-4 text-muted">From the first question to keeping every policy current — Lore handles the busywork so your team gets answers they can rely on.</p>
         </div>
         <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {FEATURES.map((f, i) => (
@@ -209,15 +208,15 @@ export default function Welcome() {
       <section id="why" className="mx-auto max-w-6xl px-5 py-20">
         <div className="grid items-center gap-10 md:grid-cols-2">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight md:text-4xl">Knowledge that <span className="gradient-text">keeps itself honest.</span></h2>
-            <p className="mt-4 text-muted">Because Lore links every fact to its source, version and topic, it can do things flat vector search can&apos;t:</p>
+            <h2 className="text-3xl font-bold tracking-tight md:text-4xl">Knowledge that <span className="gradient-text">stays right on its own.</span></h2>
+            <p className="mt-4 text-muted">The hidden cost of a wiki isn&apos;t writing it — it&apos;s keeping it trustworthy. Lore does that part for you:</p>
             <ul className="mt-5 space-y-3">
               {[
-                "Flag two documents that contradict — and resolve them via the canonical source",
-                "Adversarially challenge an answer and prove whether it survives",
-                "Block a change that would regress questions the document governs",
-                "Re-check past answers when the source they cited changes version",
-                "Fill its own gaps: unanswered question → drafted, verified doc",
+                "No more answers pulled from an outdated document",
+                "Everyone sees the same official version — no conflicting advice",
+                "New hires get up to speed from day one",
+                "Sensitive information stays with the right people",
+                "The questions people keep asking turn into real answers",
               ].map((t) => (
                 <li key={t} className="flex items-start gap-2.5 text-sm">
                   <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md text-accent-fg" style={{ background: "var(--accent)" }}><IconCheck size={13} /></span>
@@ -228,7 +227,7 @@ export default function Welcome() {
           </div>
           <div className="marketing-card p-6">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--red)" }}>
-              <IconHealth size={16} /> Conflict detected across 2 documents
+              <IconHealth size={16} /> Two documents don&apos;t agree
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
               <div className="rounded-lg border border-border bg-surface-2 p-3">
@@ -241,9 +240,9 @@ export default function Welcome() {
               </div>
             </div>
             <div className="mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium" style={{ background: "color-mix(in srgb, var(--green) 12%, transparent)", color: "var(--green)" }}>
-              <IconCheck size={13} /> Resolved → “Paid Time Off Policy” wins (canonical · current · verified)
+              <IconCheck size={13} /> Sorted → everyone&apos;s pointed to the official Paid Time Off Policy
             </div>
-            <p className="mt-2 text-xs text-muted-dim">Lore doesn&apos;t just catch the mismatch — it recommends the authoritative side and can retire the loser.</p>
+            <p className="mt-2 text-xs text-muted-dim">Lore catches the mismatch and points everyone to the right one — before someone acts on the wrong number.</p>
           </div>
         </div>
       </section>
@@ -253,7 +252,7 @@ export default function Welcome() {
         <div className="relative overflow-hidden rounded-3xl border border-border px-6 py-14 text-center" style={{ background: "linear-gradient(135deg, color-mix(in srgb, var(--accent) 14%, var(--surface)), var(--surface))" }}>
           <div className="hero-glow" />
           <h2 className="text-3xl font-bold tracking-tight md:text-4xl">Give your team one place to ask.</h2>
-          <p className="mx-auto mt-3 max-w-md text-muted">Cited, current, and scoped to who&apos;s asking. Try the live demo — no signup needed.</p>
+          <p className="mx-auto mt-3 max-w-md text-muted">Clear answers, always current, private by default. Try it now — a sample company is ready to explore, no signup needed.</p>
           <div className="mt-7 flex flex-wrap justify-center gap-3">
             <Link href="/login" className="btn-primary flex items-center gap-2 px-6 py-3 text-sm">Get started <IconArrow size={16} /></Link>
             <button onClick={demo} className="btn-ghost px-6 py-3 text-sm">Explore the demo</button>

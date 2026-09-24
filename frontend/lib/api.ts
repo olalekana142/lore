@@ -326,6 +326,29 @@ export interface KnowledgeCheck {
   stale_answers: { id: string; question: string; created_at: string | null }[];
   stale_answer_count: number;
 }
+export interface Simulation {
+  doc_id: string; title: string;
+  verdict: "clean" | "conflicts" | "regressions";
+  diff: string; proposed_facts: number;
+  impact: number;
+  impact_detail: { facts: number; related_docs: number; affected_questions: number };
+  eval: { question: string; pass: boolean; answer: string; expected: string; cause?: string }[];
+  regressions: number; eval_total: number;
+  conflicts: ConflictPair[]; conflict_count: number;
+}
+export async function simulateChange(companyId: string, docId: string, proposedText: string): Promise<Simulation> {
+  return j(await fetch(`${BASE}/documents/simulate`, {
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeader() },
+    body: JSON.stringify({ company_id: companyId, doc_id: docId, proposed_text: proposedText }),
+  }));
+}
+export async function applyChange(companyId: string, docId: string, proposedText: string): Promise<{ doc_id: string; facts_extracted: number }> {
+  return j(await fetch(`${BASE}/documents/apply`, {
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeader() },
+    body: JSON.stringify({ company_id: companyId, doc_id: docId, proposed_text: proposedText }),
+  }));
+}
+
 export async function knowledgeCheck(companyId: string, docId: string): Promise<KnowledgeCheck> {
   return j(await fetch(`${BASE}/knowledge/check`, {
     method: "POST", headers: { "Content-Type": "application/json", ...authHeader() },

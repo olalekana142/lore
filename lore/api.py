@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from lore import actions, alerts as alerts_mod, analytics, auth, challenge, escalations, feedback, glossary, health, knowledge, onboarding, provenance
+from lore import actions, alerts as alerts_mod, analytics, auth, challenge, escalations, feedback, glossary, health, knowledge, onboarding, provenance, simulate as simulate_mod
 from lore.config import settings
 from lore.graph import queries
 from lore.graph.schema import get_connection, init_schema
@@ -590,6 +590,35 @@ def document_ambiguities(req: DocRequest, authorization: str | None = Header(Non
     """Probe a policy for questions it doesn't clearly answer (ambiguity detection). Editor+."""
     cid, groups, _ = _require(authorization, "editor")
     res = knowledge.detect_ambiguities(_db(), cid, req.doc_id, groups=groups)
+    if res is None:
+        raise HTTPException(status_code=404, detail="document not found")
+    return res
+
+
+class SimulateRequest(BaseModel):
+    company_id: str
+    doc_id: str
+    proposed_text: str
+
+
+@app.post("/documents/simulate")
+def simulate_change(req: SimulateRequest, authorization: str | None = Header(None)) -> dict:
+    """Dry-run a proposed edit: diff + impact + conflict preview + governed-eval regression. Editor+."""
+    cid, groups, _ = _require(authorization, "editor")
+    res = simulate_mod.simulate_change(_db(), cid, req.doc_id, req.proposed_text, groups=groups)
+    if res is None:
+        raise HTTPException(status_code=404, detail="document not found")
+    return res
+
+
+@app.post("/documents/apply")
+def apply_change(req: SimulateRequest, authorization: str | None = Header(None)) -> dict:
+    """Publish a proposed change: re-ingest the same document id with the new text. Editor+."""
+    cid, groups, _ = _require(authorization, "editor")
+    try:
+        res = simulate_mod.apply_change(_db(), cid, req.doc_id, req.proposed_text, groups=groups)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if res is None:
         raise HTTPException(status_code=404, detail="document not found")
     return res

@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
   getDocument, verifyDocument, setAudience,
-  getImpact, getHistory, getDiff, generateQuestions, knowledgeCheck, supersedeDocument, reanswer, setCanonical, detectAmbiguities,
-  type DocDetail, type Impact, type History, type GeneratedQuestions, type KnowledgeCheck, type Reanswer, type Ambiguities,
+  getImpact, getHistory, getDiff, generateQuestions, knowledgeCheck, supersedeDocument, reanswer, setCanonical, detectAmbiguities, simulateChange, applyChange,
+  type DocDetail, type Impact, type History, type GeneratedQuestions, type KnowledgeCheck, type Reanswer, type Ambiguities, type Simulation,
 } from "@/lib/api";
 import { useCompany } from "@/lib/useCompany";
 import { useAuth, atLeast } from "@/lib/useAuth";
@@ -255,6 +255,120 @@ function AmbiguityFinder({ companyId, docId }: { companyId: string; docId: strin
                 ))}
               </ul>
             </>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SimulateChange({ doc, companyId, onApplied }: { doc: DocDetail; companyId: string; onApplied: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState(doc.text);
+  const [sim, setSim] = useState<Simulation | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [applying, setApplying] = useState(false);
+
+  async function run() {
+    setBusy(true);
+    setSim(null);
+    try {
+      setSim(await simulateChange(companyId, doc.doc_id, text));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function apply() {
+    setApplying(true);
+    try {
+      await applyChange(companyId, doc.doc_id, text);
+      onApplied();
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  const tone = sim?.verdict === "clean" ? "var(--green)" : sim?.verdict === "regressions" ? "var(--red, #dc2626)" : "var(--amber)";
+  const banner = sim?.verdict === "clean" ? "✓ Safe to publish — no conflicts, all governed checks pass"
+    : sim?.verdict === "regressions" ? `✗ Would break ${sim.regressions} answer${sim.regressions > 1 ? "s" : ""} your team relies on`
+    : `⚠ Introduces ${sim?.conflict_count} conflict${sim?.conflict_count === 1 ? "" : "s"} to resolve first`;
+  const changed = text.trim() !== doc.text.trim();
+
+  return (
+    <section className="mb-5">
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="flex items-center gap-2 text-sm font-semibold">
+          <span className="text-accent"><IconSparkle size={16} /></span> Simulate a change
+        </h2>
+        <button onClick={() => setOpen((o) => !o)} className="btn-ghost px-3 py-1.5 text-xs">
+          {open ? "Close" : "Preview an edit"}
+        </button>
+      </div>
+      <p className="mb-2 text-xs text-muted">
+        Edit the policy below and preview the effect <b>before publishing</b> — what changes, what it affects,
+        and whether it would break any answers your team relies on. Nothing goes live until you apply it.
+      </p>
+      {open && (
+        <div className="card p-4">
+          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={8}
+            className="input w-full px-3 py-2 text-sm font-mono leading-relaxed" />
+          <div className="mt-2 flex gap-2">
+            <button onClick={run} disabled={busy || !changed} className="btn-primary px-4 py-2 text-sm">
+              {busy ? "Simulating…" : "Simulate change"}
+            </button>
+            {!changed && <span className="self-center text-xs text-muted-dim">Edit the text above to simulate.</span>}
+          </div>
+
+          {sim && (
+            <div className="mt-4">
+              <div className="mb-3 rounded-lg px-3 py-2 text-sm font-semibold"
+                style={{ background: `color-mix(in srgb, ${tone} 13%, transparent)`, color: tone }}>
+                {banner}
+              </div>
+              {sim.diff && (
+                <div className="mb-3">
+                  <div className="mb-1 text-xs font-medium text-muted">What changes</div>
+                  <div className="whitespace-pre-wrap rounded-lg bg-surface-2 p-3 text-sm">{sim.diff}</div>
+                </div>
+              )}
+              <div className="mb-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                {[["Facts affected", sim.impact_detail.facts], ["Docs affected", sim.impact_detail.related_docs],
+                  ["Conflicts", sim.conflict_count], ["Checks run", sim.eval_total]].map(([k, v]) => (
+                  <div key={k as string} className="rounded-lg bg-surface-2 p-2 text-center">
+                    <div className="text-lg font-semibold text-fg">{v}</div>
+                    <div className="text-muted">{k}</div>
+                  </div>
+                ))}
+              </div>
+              {sim.eval.length > 0 && (
+                <ul className="mb-3 space-y-1">
+                  {sim.eval.map((e, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm">
+                      <span style={{ color: e.pass ? "var(--green)" : "var(--red, #dc2626)" }}>{e.pass ? "✓" : "✗"}</span>
+                      <span>{e.question}
+                        {!e.pass && <span className="mt-0.5 block text-xs text-muted-dim">expected <b className="text-fg">{e.expected}</b> · would now say “{e.answer}”{e.cause && <> · {e.cause}</>}</span>}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {sim.conflicts.length > 0 && (
+                <ul className="mb-3 space-y-1.5">
+                  {sim.conflicts.map((c, i) => (
+                    <li key={i} className="rounded-lg bg-surface-2 p-2 text-xs">
+                      <div className="text-muted">Would conflict with <b>{c.b.title}</b>: {c.reason}</div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="flex items-center gap-2">
+                <button onClick={apply} disabled={applying}
+                  className={sim.verdict === "regressions" ? "btn-ghost px-4 py-2 text-sm" : "btn-primary px-4 py-2 text-sm"}>
+                  {applying ? "Publishing…" : sim.verdict === "clean" ? "Publish this change" : "Publish anyway"}
+                </button>
+                <span className="text-xs text-muted-dim">Publishing updates the document and re-checks everything.</span>
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -609,6 +723,7 @@ export default function DocumentPage() {
           </section>
 
           <HistoryTimeline companyId={companyId} docId={doc.doc_id} canEdit={canEdit} />
+          {canEdit && <SimulateChange doc={doc} companyId={companyId} onApplied={load} />}
           {canEdit && <KnowledgeCheckPanel companyId={companyId} docId={doc.doc_id} />}
           {canEdit && <ImpactBar companyId={companyId} docId={doc.doc_id} />}
           {canEdit && <GenerateQuestions companyId={companyId} docId={doc.doc_id} />}

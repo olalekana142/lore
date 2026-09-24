@@ -5,23 +5,35 @@ import { useRouter } from "next/navigation";
 import { useTheme } from "@/lib/useTheme";
 import { enterGuest } from "@/lib/useAuth";
 import {
-  IconChat, IconGap, IconRocket, IconZap, IconHealth,
-  IconUsers, IconSun, IconMoon, IconArrow, IconCheck,
+  IconChat, IconHealth, IconShieldCheck,
+  IconClock, IconSparkle, IconAlert, IconSearch, IconCheck,
+  IconUsers, IconSun, IconMoon, IconArrow,
 } from "../components/icons";
 
 const FEATURES = [
-  { Icon: IconChat, title: "Cited answers, streamed", body: "Ask in plain English; get a synthesized answer that streams in and cites the exact documents it used." },
-  { Icon: IconUsers, title: "Permission-aware", body: "Roles and per-doc audiences mean people only ever see — and get cited — what they're allowed to." },
-  { Icon: IconHealth, title: "Conflict detection", body: "The graph reasons across docs to flag policies that contradict each other before they mislead anyone." },
-  { Icon: IconGap, title: "Gaps → auto-draft", body: "See what people ask that isn't documented, then let Lore draft the missing doc for review." },
-  { Icon: IconRocket, title: "Onboarding playbooks", body: "Generate a role-specific ramp plan from your knowledge base, with quizzes graded on real policy." },
-  { Icon: IconZap, title: "Actionable answers", body: "Turn “how do I request a laptop?” into a filed ticket — answers that actually do something." },
+  { Icon: IconChat, tag: "Answer", title: "Cited answers, streamed", body: "Ask in plain English; get a synthesized answer that streams in and cites the exact documents it used." },
+  { Icon: IconShieldCheck, tag: "Answer", title: "Why this answer — & Challenge it", body: "Every answer shows its evidence. Hit Challenge and Lore adversarially hunts for contradicting facts, then tells you whether the answer survives." },
+  { Icon: IconUsers, tag: "Answer", title: "Permission-aware", body: "Roles and per-doc audiences mean people only ever see — and get cited — what they're allowed to." },
+  { Icon: IconHealth, tag: "Audit", title: "Conflicts → canonical source", body: "Flags contradictory policies and resolves them: designate one authoritative source of truth and it wins in retrieval and conflicts." },
+  { Icon: IconAlert, tag: "Audit", title: "Proactive alerts", body: "One prioritized feed — conflicts, stale docs, missing owners, outdated answers, unmet demand. Problems find you." },
+  { Icon: IconSearch, tag: "Audit", title: "Ambiguity detection", body: "Probes a policy with the edge-case questions a careful reader would ask — and flags the ones it doesn't clearly answer." },
+  { Icon: IconClock, tag: "Change", title: "Versioned & impact-aware", body: "Every change is versioned with a plain-English “what changed”, and Lore shows exactly what a change will affect before you publish." },
+  { Icon: IconCheck, tag: "Change", title: "A publishing gate", body: "Publishing re-runs impact, conflict detection and the evaluation cases a document governs — a knowledge regression blocks the change." },
+  { Icon: IconSparkle, tag: "Improve", title: "Self-healing knowledge", body: "Turn an unanswered question into a verified, cited doc — and re-answer the past answers a change quietly made stale." },
+];
+
+const LOOP = [
+  { Icon: IconChat, title: "Answer", body: "grounded · cited · challengeable" },
+  { Icon: IconHealth, title: "Audit", body: "gaps · conflicts · staleness · alerts" },
+  { Icon: IconClock, title: "Change", body: "versions · impact · regressions" },
+  { Icon: IconSparkle, title: "Improve", body: "gap → draft → publish" },
+  { Icon: IconShieldCheck, title: "Re-evaluate", body: "stale answers → re-answer" },
 ];
 
 const STEPS = [
   { n: "01", title: "Connect your docs", body: "Upload policies, SOPs, wikis and FAQs — or sync a Google Drive folder. PDF, DOCX, Markdown, CSV." },
-  { n: "02", title: "Lore builds a graph", body: "It extracts atomic facts, links them to topics and sources, and embeds everything for retrieval." },
-  { n: "03", title: "Your team just asks", body: "Every answer is grounded, cited, permission-scoped, and always reflects the latest version." },
+  { n: "02", title: "Lore builds a graph", body: "It extracts atomic facts, links them to topics, versions and sources, and embeds everything for retrieval." },
+  { n: "03", title: "Your team just asks", body: "Every answer is grounded, cited, permission-scoped, and always reflects the latest verified version." },
 ];
 
 export default function Welcome() {
@@ -67,12 +79,13 @@ export default function Welcome() {
               <span className="h-1.5 w-1.5 rounded-full bg-green" /> GraphRAG knowledge base for your company
             </div>
             <h1 className="animate-fade-up text-4xl font-bold leading-[1.05] tracking-tight md:text-6xl" style={{ animationDelay: "60ms" }}>
-              Every answer your team needs,
-              <br className="hidden md:block" /> <span className="gradient-text">from your own docs.</span>
+              Your company&apos;s knowledge,
+              <br className="hidden md:block" /> <span className="gradient-text">continuously verified.</span>
             </h1>
             <p className="animate-fade-up mx-auto mt-5 max-w-xl text-lg text-muted" style={{ animationDelay: "120ms" }}>
-              Lore turns your company&apos;s policies, wikis and SOPs into a knowledge base anyone can just ask —
-              with cited answers, permission controls, and a graph that spots what&apos;s stale, conflicting, or missing.
+              Lore turns your policies, wikis and SOPs into a knowledge base anyone can just ask — with cited answers it can
+              defend, a graph that catches what&apos;s stale, conflicting or missing, and a publishing gate that keeps every
+              change honest.
             </p>
             <div className="animate-fade-up mt-8 flex flex-wrap justify-center gap-3" style={{ animationDelay: "180ms" }}>
               <Link href="/login" className="btn-primary flex items-center gap-2 px-6 py-3 text-sm">
@@ -108,7 +121,13 @@ export default function Welcome() {
                       <span className="text-sm font-semibold">Paid Time Off Policy</span>
                       <span className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium text-green"><IconCheck size={12} /> Verified · HR Team</span>
                     </div>
-                    <div className="mt-1 pl-7 text-[11px] text-muted-dim">v2 · updated 2 weeks ago</div>
+                    <div className="mt-1 pl-7 text-[11px] text-muted-dim">v2 · updated 2 weeks ago · ★ authoritative source</div>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium" style={{ background: "color-mix(in srgb, var(--green) 14%, transparent)", color: "var(--green)" }}>
+                      <IconShieldCheck size={11} /> Survives challenge
+                    </span>
+                    <span className="text-muted-dim">legacy “20 days” claim found &amp; beaten as superseded</span>
                   </div>
                 </div>
               </div>
@@ -120,13 +139,34 @@ export default function Welcome() {
       {/* Stats */}
       <section className="border-y border-border bg-surface/40">
         <div className="mx-auto grid max-w-4xl grid-cols-2 gap-6 px-5 py-10 text-center md:grid-cols-4">
-          {[["Cited", "every answer"], ["Permission-aware", "by role & group"], ["Always current", "re-ingest & refresh"], ["Graph-native", "facts, docs, topics"]].map(([a, b]) => (
+          {[["Cited & defensible", "every answer"], ["Self-auditing", "conflicts · gaps · staleness"], ["Change-managed", "versions · impact · regressions"], ["Self-healing", "gap → draft → verify"]].map(([a, b]) => (
             <div key={a}>
               <div className="text-lg font-bold gradient-text">{a}</div>
               <div className="mt-1 text-xs text-muted">{b}</div>
             </div>
           ))}
         </div>
+      </section>
+
+      {/* The loop */}
+      <section className="mx-auto max-w-6xl px-5 pt-20">
+        <div className="mx-auto max-w-2xl text-center">
+          <h2 className="text-3xl font-bold tracking-tight md:text-4xl">Not a chatbot. <span className="gradient-text">A knowledge loop.</span></h2>
+          <p className="mt-4 text-muted">Lore doesn&apos;t just answer — it audits its own knowledge, manages every change, fills its own gaps, and re-checks past answers when the source moves.</p>
+        </div>
+        <div className="mt-12 flex flex-wrap items-stretch justify-center gap-3">
+          {LOOP.map((s, i) => (
+            <div key={s.title} className="flex items-center gap-3">
+              <div className="marketing-card animate-fade-up flex w-[188px] flex-col items-center px-4 py-5 text-center" style={{ animationDelay: `${i * 70}ms` }}>
+                <span className="grid h-10 w-10 place-items-center rounded-xl bg-accent-weak text-accent"><s.Icon size={20} /></span>
+                <div className="mt-3 font-semibold">{s.title}</div>
+                <div className="mt-1 text-xs text-muted-dim">{s.body}</div>
+              </div>
+              {i < LOOP.length - 1 && <span className="hidden text-muted-dim lg:block"><IconArrow size={18} /></span>}
+            </div>
+          ))}
+        </div>
+        <p className="mt-6 text-center text-xs text-muted-dim">…then repeat. Every generated artifact stays traceable to the exact knowledge state it came from.</p>
       </section>
 
       {/* Features */}
@@ -137,8 +177,11 @@ export default function Welcome() {
         </div>
         <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {FEATURES.map((f, i) => (
-            <div key={f.title} className="marketing-card animate-fade-up p-6" style={{ animationDelay: `${i * 60}ms` }}>
-              <span className="grid h-11 w-11 place-items-center rounded-xl bg-accent-weak text-accent"><f.Icon size={22} /></span>
+            <div key={f.title} className="marketing-card animate-fade-up p-6" style={{ animationDelay: `${i * 50}ms` }}>
+              <div className="flex items-center justify-between">
+                <span className="grid h-11 w-11 place-items-center rounded-xl bg-accent-weak text-accent"><f.Icon size={22} /></span>
+                <span className="rounded-full border border-border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-dim">{f.tag}</span>
+              </div>
               <h3 className="mt-4 text-lg font-semibold">{f.title}</h3>
               <p className="mt-1.5 text-sm leading-relaxed text-muted">{f.body}</p>
             </div>
@@ -167,13 +210,14 @@ export default function Welcome() {
         <div className="grid items-center gap-10 md:grid-cols-2">
           <div>
             <h2 className="text-3xl font-bold tracking-tight md:text-4xl">Knowledge that <span className="gradient-text">keeps itself honest.</span></h2>
-            <p className="mt-4 text-muted">Because Lore links every fact to its source and topic, it can do things flat vector search can&apos;t:</p>
+            <p className="mt-4 text-muted">Because Lore links every fact to its source, version and topic, it can do things flat vector search can&apos;t:</p>
             <ul className="mt-5 space-y-3">
               {[
-                "Flag two documents that give contradictory answers",
-                "Surface questions people ask that no doc covers — and draft the fix",
-                "Show what's stale, unverified, or never actually used",
-                "Scope every answer to the reader's role and groups",
+                "Flag two documents that contradict — and resolve them via the canonical source",
+                "Adversarially challenge an answer and prove whether it survives",
+                "Block a change that would regress questions the document governs",
+                "Re-check past answers when the source they cited changes version",
+                "Fill its own gaps: unanswered question → drafted, verified doc",
               ].map((t) => (
                 <li key={t} className="flex items-start gap-2.5 text-sm">
                   <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md text-accent-fg" style={{ background: "var(--accent)" }}><IconCheck size={13} /></span>
@@ -196,7 +240,10 @@ export default function Welcome() {
                 <div className="mt-1 text-sm">Staff receive <b>20 days</b> vacation per year.</div>
               </div>
             </div>
-            <p className="mt-3 text-xs text-muted-dim">Lore catches the mismatch so someone can fix it — before an employee acts on the wrong number.</p>
+            <div className="mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium" style={{ background: "color-mix(in srgb, var(--green) 12%, transparent)", color: "var(--green)" }}>
+              <IconCheck size={13} /> Resolved → “Paid Time Off Policy” wins (canonical · current · verified)
+            </div>
+            <p className="mt-2 text-xs text-muted-dim">Lore doesn&apos;t just catch the mismatch — it recommends the authoritative side and can retire the loser.</p>
           </div>
         </div>
       </section>

@@ -16,6 +16,7 @@ import {
   IconHealth,
   IconRocket,
   IconUsers,
+  IconSparkle,
   IconSun,
   IconMoon,
 } from "./icons";
@@ -24,6 +25,7 @@ type Min = "member" | "editor" | "admin" | undefined;
 const NAV: { href: string; label: string; Icon: (p: { size?: number }) => ReactNode; min?: Min }[] = [
   { href: "/", label: "Dashboard", Icon: IconHome },
   { href: "/ask", label: "Ask Lore", Icon: IconChat },
+  { href: "/workspace", label: "Workspace", Icon: IconSparkle },
   { href: "/library", label: "Documents", Icon: IconLibrary },
   { href: "/onboarding", label: "Onboarding", Icon: IconRocket },
   { href: "/gaps", label: "Knowledge gaps", Icon: IconGap, min: "editor" },

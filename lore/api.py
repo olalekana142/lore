@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from lore import actions, alerts as alerts_mod, analytics, auth, challenge, escalations, feedback, glossary, health, knowledge, onboarding, provenance, simulate as simulate_mod
+from lore import actions, alerts as alerts_mod, analytics, auth, challenge, escalations, feedback, glossary, health, knowledge, meetings, onboarding, provenance, simulate as simulate_mod
 from lore.config import settings
 from lore.graph import queries
 from lore.graph.schema import get_connection, init_schema
@@ -640,6 +640,22 @@ def knowledge_check(req: DocRequest, authorization: str | None = Header(None)) -
 class ChallengeRequest(BaseModel):
     company_id: str
     question: str
+
+
+class MeetingRequest(BaseModel):
+    company_id: str
+    transcript: str
+
+
+@app.post("/meetings/analyze")
+def analyze_meeting(req: MeetingRequest, authorization: str | None = Header(None)) -> dict:
+    """Turn a meeting transcript into decisions/actions/questions/email + a policy check.
+
+    Any signed-in user; the policy check uses their own ACL groups."""
+    cid, groups, _ = _identity(req.company_id, authorization)
+    if not req.transcript.strip():
+        raise HTTPException(status_code=400, detail="transcript is empty")
+    return meetings.analyze_meeting(_db(), cid, req.transcript, groups=groups)
 
 
 @app.post("/answers/challenge")

@@ -356,6 +356,22 @@ export async function knowledgeCheck(companyId: string, docId: string): Promise<
   }));
 }
 
+export interface MeetingAnalysis {
+  summary: string;
+  decisions: string[];
+  action_items: { task: string; owner: string; due: string }[];
+  open_questions: string[];
+  follow_up_email: string;
+  policy_conflicts: { decision: string; issue: string; source: string }[];
+  checked_against: string[];
+}
+export async function analyzeMeeting(companyId: string, transcript: string): Promise<MeetingAnalysis> {
+  return j(await fetch(`${BASE}/meetings/analyze`, {
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeader() },
+    body: JSON.stringify({ company_id: companyId, transcript }),
+  }));
+}
+
 export type AlertSeverity = "critical" | "review" | "gap" | "info";
 export interface KnowledgeAlert {
   severity: AlertSeverity; kind: string; title: string; detail: string; href: string;

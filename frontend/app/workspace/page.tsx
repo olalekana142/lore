@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { analyzeMeeting, type MeetingAnalysis } from "@/lib/api";
+import { useEffect, useState } from "react";
+import { analyzeMeeting, listProjects, createProject, addProjectEntries, type MeetingAnalysis, type ProjectSummary } from "@/lib/api";
 import { useCompany } from "@/lib/useCompany";
 import { PageHeader, ErrorNote } from "../components/ui";
 import { IconSparkle, IconCheck, IconGap, IconHealth, IconCopy, IconChat } from "../components/icons";
@@ -20,12 +20,45 @@ export default function WorkspacePage() {
   const [error, setError] = useState<string | null>(null);
   const [res, setRes] = useState<MeetingAnalysis | null>(null);
   const [copied, setCopied] = useState(false);
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [projSel, setProjSel] = useState("");
+  const [newProj, setNewProj] = useState("");
+  const [saved, setSaved] = useState(0);
+  const [savingProj, setSavingProj] = useState(false);
+
+  useEffect(() => { listProjects(companyId).then(setProjects).catch(() => {}); }, [companyId]);
+
+  async function saveToProject() {
+    if (!res) return;
+    setSavingProj(true);
+    try {
+      let pid = projSel;
+      if (!pid && newProj.trim()) {
+        const p = await createProject(companyId, newProj.trim());
+        pid = p.id;
+      }
+      if (!pid) return;
+      const entries = [
+        ...res.decisions.map((d) => ({ kind: "decision", title: d })),
+        ...res.action_items.map((a) => ({ kind: "action", title: a.task, owner: a.owner, due: a.due })),
+        ...res.open_questions.map((q) => ({ kind: "question", title: q })),
+      ];
+      const { added } = await addProjectEntries(companyId, pid, entries);
+      setSaved(added);
+      setProjSel(pid);
+      setNewProj("");
+      await listProjects(companyId).then(setProjects).catch(() => {});
+    } finally {
+      setSavingProj(false);
+    }
+  }
 
   async function analyze() {
     if (!transcript.trim()) return;
     setBusy(true);
     setError(null);
     setRes(null);
+    setSaved(0);
     try {
       setRes(await analyzeMeeting(companyId, transcript));
     } catch (e) {
@@ -77,6 +110,20 @@ export default function WorkspacePage() {
 
       {res && (
         <div className="mt-4 space-y-4">
+          <section className="animate-fade-up card flex flex-wrap items-center gap-2 p-4">
+            <span className="text-sm font-medium">Save to a project</span>
+            <select value={projSel} onChange={(e) => setProjSel(e.target.value)} className="input px-3 py-1.5 text-sm">
+              <option value="">{projects.length ? "Choose a project…" : "No projects yet"}</option>
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            <span className="text-xs text-muted-dim">or</span>
+            <input value={newProj} onChange={(e) => setNewProj(e.target.value)} placeholder="new project name" className="input px-3 py-1.5 text-sm" />
+            <button onClick={saveToProject} disabled={savingProj || (!projSel && !newProj.trim())} className="btn-primary px-3 py-1.5 text-sm">
+              {savingProj ? "Saving…" : "Save decisions & actions"}
+            </button>
+            {saved > 0 && <span className="text-sm font-medium" style={{ color: "var(--green)" }}>✓ Saved {saved} item{saved === 1 ? "" : "s"} to project memory</span>}
+          </section>
+
           {res.policy_conflicts.length > 0 && (
             <section className="animate-fade-up card border-l-4 p-5" style={{ borderLeftColor: "var(--amber)" }}>
               <h3 className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--amber)" }}>

@@ -356,6 +356,39 @@ export async function knowledgeCheck(companyId: string, docId: string): Promise<
   }));
 }
 
+export interface ProjectSummary { id: string; name: string; description: string; created_at: string | null; entries: number }
+export interface ProjectEntry { id: string; kind: string; title: string; body: string; owner: string; due: string; created_at: string | null }
+export interface Project {
+  id: string; name: string; description: string; created_at: string | null;
+  entries: ProjectEntry[]; counts: Record<string, number>;
+}
+export interface ProjectAnswer { project_id: string; question: string; answer: string; sources: Source[] }
+
+export async function listProjects(companyId: string): Promise<ProjectSummary[]> {
+  return j(await fetch(`${BASE}/projects?${qs({ company_id: companyId })}`, { headers: authHeader() }));
+}
+export async function createProject(companyId: string, name: string, description = ""): Promise<{ id: string; name: string }> {
+  return j(await fetch(`${BASE}/projects`, {
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeader() },
+    body: JSON.stringify({ company_id: companyId, name, description }),
+  }));
+}
+export async function getProject(companyId: string, projectId: string): Promise<Project> {
+  return j(await fetch(`${BASE}/projects/${encodeURIComponent(projectId)}?${qs({ company_id: companyId })}`, { headers: authHeader() }));
+}
+export async function addProjectEntries(companyId: string, projectId: string, entries: Partial<ProjectEntry>[]): Promise<{ added: number }> {
+  return j(await fetch(`${BASE}/projects/${encodeURIComponent(projectId)}/entries`, {
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeader() },
+    body: JSON.stringify({ company_id: companyId, entries }),
+  }));
+}
+export async function askProject(companyId: string, projectId: string, question: string): Promise<ProjectAnswer> {
+  return j(await fetch(`${BASE}/projects/${encodeURIComponent(projectId)}/ask`, {
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeader() },
+    body: JSON.stringify({ company_id: companyId, question }),
+  }));
+}
+
 export interface Composed { format: string; label: string; content: string }
 export async function composeAnswer(companyId: string, question: string, answer: string, format: string): Promise<Composed> {
   return j(await fetch(`${BASE}/compose`, {

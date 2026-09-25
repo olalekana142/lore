@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from lore import actions, alerts as alerts_mod, analytics, auth, challenge, compose as compose_mod, escalations, feedback, glossary, health, knowledge, meetings, onboarding, provenance, simulate as simulate_mod
+from lore import actions, alerts as alerts_mod, analytics, auth, challenge, compose as compose_mod, escalations, feedback, glossary, health, knowledge, meetings, onboarding, projects as projects_mod, provenance, simulate as simulate_mod
 from lore.config import settings
 from lore.graph import queries
 from lore.graph.schema import get_connection, init_schema
@@ -661,6 +661,61 @@ def compose(req: ComposeRequest, authorization: str | None = Header(None)) -> di
     if not req.answer.strip():
         raise HTTPException(status_code=400, detail="nothing to compose")
     return compose_mod.compose(req.question, req.answer, req.format)
+
+
+class CreateProjectRequest(BaseModel):
+    company_id: str
+    name: str
+    description: str = ""
+
+
+class ProjectEntriesRequest(BaseModel):
+    company_id: str
+    entries: list[dict]
+
+
+class ProjectAskRequest(BaseModel):
+    company_id: str
+    question: str
+
+
+@app.get("/projects")
+def list_projects(company_id: str, authorization: str | None = Header(None)) -> list[dict]:
+    cid, _, _ = _require(authorization, "member")
+    return projects_mod.list_projects(_db(), cid)
+
+
+@app.post("/projects")
+def create_project(req: CreateProjectRequest, authorization: str | None = Header(None)) -> dict:
+    cid, _, _ = _require(authorization, "member")
+    return projects_mod.create_project(_db(), cid, req.name, req.description)
+
+
+@app.get("/projects/{project_id}")
+def get_project(project_id: str, company_id: str, authorization: str | None = Header(None)) -> dict:
+    cid, _, _ = _require(authorization, "member")
+    res = projects_mod.get_project(_db(), cid, project_id)
+    if res is None:
+        raise HTTPException(status_code=404, detail="project not found")
+    return res
+
+
+@app.post("/projects/{project_id}/entries")
+def add_project_entries(project_id: str, req: ProjectEntriesRequest, authorization: str | None = Header(None)) -> dict:
+    cid, _, _ = _require(authorization, "member")
+    added = projects_mod.add_entries(_db(), cid, project_id, req.entries)
+    if added == 0 and req.entries:
+        raise HTTPException(status_code=404, detail="project not found or no valid entries")
+    return {"added": added}
+
+
+@app.post("/projects/{project_id}/ask")
+def ask_project(project_id: str, req: ProjectAskRequest, authorization: str | None = Header(None)) -> dict:
+    cid, groups, _ = _require(authorization, "member")
+    res = projects_mod.ask_project(_db(), cid, project_id, req.question, groups=groups)
+    if res is None:
+        raise HTTPException(status_code=404, detail="project not found")
+    return res
 
 
 @app.post("/meetings/analyze")

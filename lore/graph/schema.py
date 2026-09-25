@@ -75,6 +75,16 @@ NODE_TABLES = [
         cited_docs STRING[], cited_versions INT64[], created_at TIMESTAMP,
         reanswered_at TIMESTAMP, PRIMARY KEY(id)
     )""",
+    # Project memory: a workspace that accumulates decisions, action items, open questions and
+    # notes over time (e.g. from meeting analyses), so the project's own history is queryable.
+    """CREATE NODE TABLE IF NOT EXISTS Project(
+        id STRING, company_id STRING, name STRING, description STRING, created_at TIMESTAMP,
+        PRIMARY KEY(id)
+    )""",
+    """CREATE NODE TABLE IF NOT EXISTS ProjectEntry(
+        id STRING, project_id STRING, kind STRING, title STRING, body STRING,
+        owner STRING, due STRING, created_at TIMESTAMP, PRIMARY KEY(id)
+    )""",
 ]
 
 # --- Relationship tables ---
@@ -87,6 +97,8 @@ REL_TABLES = [
     "CREATE REL TABLE IF NOT EXISTS HAS_VERSION(FROM Document TO DocumentVersion)",
     "CREATE REL TABLE IF NOT EXISTS CONNECTED_TO(FROM Topic TO Topic, weight DOUBLE)",
     "CREATE REL TABLE IF NOT EXISTS GENERATED(FROM Company TO Answer)",
+    "CREATE REL TABLE IF NOT EXISTS HAS_PROJECT(FROM Company TO Project)",
+    "CREATE REL TABLE IF NOT EXISTS HAS_ENTRY(FROM Project TO ProjectEntry)",
 ]
 
 

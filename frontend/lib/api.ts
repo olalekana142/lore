@@ -356,6 +356,21 @@ export async function knowledgeCheck(companyId: string, docId: string): Promise<
   }));
 }
 
+export interface UniversalSearch {
+  query: string; total: number;
+  knowledge: { statement: string; doc_id: string; title: string }[];
+  documents: { doc_id: string; title: string; owner: string | null }[];
+  projects: { id: string; name: string; description: string }[];
+  decisions: { title: string; project_id: string; project: string }[];
+  questions: { title: string; project_id: string; project: string }[];
+  actions: { title: string; project_id: string; project: string }[];
+  people: { name: string; about: string }[];
+  glossary: { term: string; definition: string }[];
+}
+export async function searchAll(companyId: string, query: string): Promise<UniversalSearch> {
+  return j(await fetch(`${BASE}/search/all?${qs({ company_id: companyId, query })}`, { headers: authHeader() }));
+}
+
 export interface ProjectSummary { id: string; name: string; description: string; created_at: string | null; entries: number }
 export interface ProjectEntry { id: string; kind: string; title: string; body: string; owner: string; due: string; created_at: string | null }
 export interface Project {

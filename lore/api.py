@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from lore import actions, alerts as alerts_mod, analytics, auth, challenge, compose as compose_mod, escalations, feedback, glossary, health, knowledge, meetings, onboarding, projects as projects_mod, provenance, simulate as simulate_mod
+from lore import actions, alerts as alerts_mod, analytics, auth, challenge, compose as compose_mod, escalations, feedback, glossary, health, knowledge, meetings, onboarding, projects as projects_mod, provenance, search as search_mod, simulate as simulate_mod
 from lore.config import settings
 from lore.graph import queries
 from lore.graph.schema import get_connection, init_schema
@@ -755,6 +755,13 @@ def answers_reanswer(req: dict, authorization: str | None = Header(None)) -> dic
     if res is None:
         raise HTTPException(status_code=404, detail="answer not found")
     return res
+
+
+@app.get("/search/all")
+def search_all(company_id: str, query: str, authorization: str | None = Header(None)) -> dict:
+    """Universal search across knowledge, documents, projects, decisions, people, glossary."""
+    cid, groups, _ = _identity(company_id, authorization)
+    return search_mod.universal_search(_db(), cid, query, groups=groups)
 
 
 @app.get("/search")

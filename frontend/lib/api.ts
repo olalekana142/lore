@@ -356,6 +356,14 @@ export async function knowledgeCheck(companyId: string, docId: string): Promise<
   }));
 }
 
+export interface Composed { format: string; label: string; content: string }
+export async function composeAnswer(companyId: string, question: string, answer: string, format: string): Promise<Composed> {
+  return j(await fetch(`${BASE}/compose`, {
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeader() },
+    body: JSON.stringify({ company_id: companyId, question, answer, format }),
+  }));
+}
+
 export interface MeetingAnalysis {
   summary: string;
   decisions: string[];

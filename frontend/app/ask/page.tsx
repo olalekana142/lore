@@ -2,13 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  askStream, sendFeedback, escalate, suggestAction, executeAction, challengeAnswer,
-  type Confidence, type Source, type Turn, type ActionSuggestion, type Ticket, type Challenge,
+  askStream, sendFeedback, escalate, suggestAction, executeAction, challengeAnswer, composeAnswer,
+  type Confidence, type Source, type Turn, type ActionSuggestion, type Ticket, type Challenge, type Composed,
 } from "@/lib/api";
 import { useCompany } from "@/lib/useCompany";
 import AnswerText from "../components/AnswerText";
 import { ConfidenceBadge, SourceCard } from "../components/ui";
-import { IconSend, IconThumbUp, IconThumbDown, IconChat, IconGap, IconZap, IconInfo, IconShieldCheck } from "../components/icons";
+import { IconSend, IconThumbUp, IconThumbDown, IconChat, IconGap, IconZap, IconInfo, IconShieldCheck, IconCopy, IconSparkle } from "../components/icons";
 import { relativeDate } from "@/lib/format";
 
 interface Msg {
@@ -263,7 +263,27 @@ function AssistantBubble({ msg, companyId, question }: { msg: Msg; companyId: st
   const [filing, setFiling] = useState(false);
   const [chal, setChal] = useState<Challenge | null>(null);
   const [challenging, setChallenging] = useState(false);
+  const [composed, setComposed] = useState<Composed | null>(null);
+  const [composing, setComposing] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const askedRef = useRef(false);
+
+  const compose = async (fmt: string) => {
+    setComposing(fmt);
+    setComposed(null);
+    try {
+      setComposed(await composeAnswer(companyId, question, msg.content, fmt));
+    } finally {
+      setComposing(null);
+    }
+  };
+  const copyComposed = () => {
+    if (!composed) return;
+    navigator.clipboard?.writeText(composed.content).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }).catch(() => {});
+  };
 
   const runChallenge = async () => {
     setChallenging(true);
@@ -358,6 +378,31 @@ function AssistantBubble({ msg, companyId, question }: { msg: Msg; companyId: st
 
         {why && msg.sources && msg.sources.length > 0 && <WhyPanel sources={msg.sources} />}
         {chal && <ChallengePanel chal={chal} />}
+
+        {!msg.streaming && msg.content && msg.confidence !== "none" && (
+          <div className="mt-3">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 inline-flex items-center gap-1 text-xs text-muted-dim"><IconSparkle size={13} /> Turn this into</span>
+              {[["email", "Email"], ["checklist", "Checklist"], ["faq", "FAQ"], ["memo", "Memo"], ["slack", "Slack"]].map(([fmt, label]) => (
+                <button key={fmt} onClick={() => compose(fmt)} disabled={!!composing}
+                  className="rounded-md border border-border px-2 py-1 text-xs font-medium text-muted transition-colors hover:text-foreground disabled:opacity-50">
+                  {composing === fmt ? "…" : label}
+                </button>
+              ))}
+            </div>
+            {composed && (
+              <div className="animate-scale-in mt-2 rounded-xl border border-border bg-surface-2 p-3">
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="text-xs font-semibold capitalize text-muted-dim">{composed.label}</span>
+                  <button onClick={copyComposed} className="inline-flex items-center gap-1 text-xs text-muted hover:text-foreground">
+                    <IconCopy size={13} /> {copied ? "Copied" : "Copy"}
+                  </button>
+                </div>
+                <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">{composed.content}</pre>
+              </div>
+            )}
+          </div>
+        )}
 
         {action?.actionable && (
           <div className="mt-3 rounded-lg border p-3" style={{ borderColor: "var(--accent)", background: "var(--accent-weak)" }}>

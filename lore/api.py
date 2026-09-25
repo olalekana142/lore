@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from lore import actions, alerts as alerts_mod, analytics, auth, challenge, escalations, feedback, glossary, health, knowledge, meetings, onboarding, provenance, simulate as simulate_mod
+from lore import actions, alerts as alerts_mod, analytics, auth, challenge, compose as compose_mod, escalations, feedback, glossary, health, knowledge, meetings, onboarding, provenance, simulate as simulate_mod
 from lore.config import settings
 from lore.graph import queries
 from lore.graph.schema import get_connection, init_schema
@@ -645,6 +645,22 @@ class ChallengeRequest(BaseModel):
 class MeetingRequest(BaseModel):
     company_id: str
     transcript: str
+
+
+class ComposeRequest(BaseModel):
+    company_id: str
+    question: str
+    answer: str
+    format: str
+
+
+@app.post("/compose")
+def compose(req: ComposeRequest, authorization: str | None = Header(None)) -> dict:
+    """Reformat a grounded answer into a work product (email/checklist/faq/memo/slack)."""
+    _identity(req.company_id, authorization)
+    if not req.answer.strip():
+        raise HTTPException(status_code=400, detail="nothing to compose")
+    return compose_mod.compose(req.question, req.answer, req.format)
 
 
 @app.post("/meetings/analyze")

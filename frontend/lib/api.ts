@@ -356,6 +356,17 @@ export async function knowledgeCheck(companyId: string, docId: string): Promise<
   }));
 }
 
+export interface AutopilotItem {
+  severity: AlertSeverity; kind: string; title: string; detail: string; href: string;
+  action?: { type: string; doc_id: string; title: string };
+}
+export interface Autopilot {
+  headline: string; count: number; items: AutopilotItem[]; counts: Record<AlertSeverity, number>;
+}
+export async function getAutopilot(companyId: string): Promise<Autopilot> {
+  return j(await fetch(`${BASE}/autopilot?${qs({ company_id: companyId })}`, { headers: authHeader() }));
+}
+
 export interface Briefing {
   name: string; role: string;
   recent_changes: { doc_id: string; title: string; version: number; updated_at: string | null; changed: boolean }[];

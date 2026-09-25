@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from lore import actions, alerts as alerts_mod, analytics, auth, briefing as briefing_mod, challenge, compose as compose_mod, escalations, feedback, glossary, health, knowledge, meetings, onboarding, projects as projects_mod, provenance, search as search_mod, simulate as simulate_mod
+from lore import actions, alerts as alerts_mod, analytics, auth, autopilot as autopilot_mod, briefing as briefing_mod, challenge, compose as compose_mod, escalations, feedback, glossary, health, knowledge, meetings, onboarding, projects as projects_mod, provenance, search as search_mod, simulate as simulate_mod
 from lore.config import settings
 from lore.graph import queries
 from lore.graph.schema import get_connection, init_schema
@@ -441,6 +441,13 @@ def get_alerts(company_id: str, authorization: str | None = Header(None)) -> dic
     """Proactive prioritised alerts (conflicts, stale, unowned, gaps, unused). Editor+."""
     cid, groups, _ = _require(authorization, "editor")
     return alerts_mod.alerts(_db(), cid, groups=groups)
+
+
+@app.get("/autopilot")
+def get_autopilot(company_id: str, authorization: str | None = Header(None)) -> dict:
+    """Proactive attention digest (supersede suggestions, recurring gaps, stale, unowned…). Editor+."""
+    cid, groups, _ = _require(authorization, "editor")
+    return autopilot_mod.autopilot(_db(), cid, groups=groups)
 
 
 @app.get("/audit")

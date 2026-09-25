@@ -19,6 +19,7 @@ import {
   IconSparkle,
   IconBook,
   IconSearch,
+  IconAlert,
   IconSun,
   IconMoon,
 } from "./icons";
@@ -32,6 +33,7 @@ const NAV: { href: string; label: string; Icon: (p: { size?: number }) => ReactN
   { href: "/projects", label: "Projects", Icon: IconBook },
   { href: "/library", label: "Documents", Icon: IconLibrary },
   { href: "/onboarding", label: "Onboarding", Icon: IconRocket },
+  { href: "/autopilot", label: "Autopilot", Icon: IconAlert, min: "editor" },
   { href: "/gaps", label: "Knowledge gaps", Icon: IconGap, min: "editor" },
   { href: "/health", label: "Content health", Icon: IconHealth, min: "editor" },
   { href: "/connect", label: "Add documents", Icon: IconUpload, min: "editor" },

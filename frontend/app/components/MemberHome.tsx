@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { getHome, type HomeData } from "@/lib/api";
 import { relativeDate } from "@/lib/format";
 import { ErrorNote } from "./ui";
+import DailyBriefing from "./DailyBriefing";
 import { IconChat, IconRocket, IconLibrary, IconArrow, IconClock } from "./icons";
 
 export default function MemberHome({ companyId, name }: { companyId: string; name: string }) {
@@ -47,12 +48,7 @@ export default function MemberHome({ companyId, name }: { companyId: string; nam
 
   return (
     <div className="mx-auto max-w-4xl">
-      <header className="animate-fade-up mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">
-          {name ? `Welcome, ${name.split(" ")[0]}` : "Welcome"} 👋
-        </h1>
-        <p className="mt-1.5 text-sm text-muted">Ask anything about {companyId} — answers come from the company&apos;s own documents.</p>
-      </header>
+      <DailyBriefing companyId={companyId} />
 
       {/* Ask bar */}
       <form onSubmit={(e) => { e.preventDefault(); ask(q); }} className="animate-fade-up mb-4 flex gap-2" style={{ animationDelay: "60ms" }}>

@@ -356,6 +356,17 @@ export async function knowledgeCheck(companyId: string, docId: string): Promise<
   }));
 }
 
+export interface Briefing {
+  name: string; role: string;
+  recent_changes: { doc_id: string; title: string; version: number; updated_at: string | null; changed: boolean }[];
+  open_questions: { title: string; project_id: string; project: string }[];
+  projects: { id: string; name: string; open_questions: number; created_at: string | null }[];
+  ops?: { gaps: number; stale: number };
+}
+export async function getBriefing(companyId: string): Promise<Briefing> {
+  return j(await fetch(`${BASE}/me/briefing?${qs({ company_id: companyId })}`, { headers: authHeader() }));
+}
+
 export interface UniversalSearch {
   query: string; total: number;
   knowledge: { statement: string; doc_id: string; title: string }[];

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getOverview, listUsers, getAlerts, type Overview, type ManagedUser, type Alerts, type AlertSeverity } from "@/lib/api";
 import { relativeDate } from "@/lib/format";
 import { StatTile, ErrorNote } from "./ui";
+import DailyBriefing from "./DailyBriefing";
 import { IconChat, IconUpload, IconGap, IconClock, IconArrow, IconUsers } from "./icons";
 
 export default function OpsDashboard({ companyId, role }: { companyId: string; role: string }) {
@@ -33,12 +34,14 @@ export default function OpsDashboard({ companyId, role }: { companyId: string; r
 
   return (
     <div className="mx-auto max-w-5xl">
-      <header className="animate-fade-up mb-7 flex flex-wrap items-end justify-between gap-4">
+      <DailyBriefing companyId={companyId} />
+
+      <header className="animate-fade-up mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">
+          <h2 className="text-lg font-bold tracking-tight">
             <span className="capitalize">{companyId}</span> knowledge base
-          </h1>
-          <p className="mt-1.5 text-sm text-muted">
+          </h2>
+          <p className="mt-1 text-sm text-muted">
             {role === "admin" ? "Admin overview — org, content health and usage." : "Knowledge operations — gaps, freshness and usage."}
           </p>
         </div>

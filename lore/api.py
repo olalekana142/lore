@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from lore import actions, alerts as alerts_mod, analytics, auth, challenge, compose as compose_mod, escalations, feedback, glossary, health, knowledge, meetings, onboarding, projects as projects_mod, provenance, search as search_mod, simulate as simulate_mod
+from lore import actions, alerts as alerts_mod, analytics, auth, briefing as briefing_mod, challenge, compose as compose_mod, escalations, feedback, glossary, health, knowledge, meetings, onboarding, projects as projects_mod, provenance, search as search_mod, simulate as simulate_mod
 from lore.config import settings
 from lore.graph import queries
 from lore.graph.schema import get_connection, init_schema
@@ -677,6 +677,16 @@ class ProjectEntriesRequest(BaseModel):
 class ProjectAskRequest(BaseModel):
     company_id: str
     question: str
+
+
+@app.get("/me/briefing")
+def my_briefing(company_id: str, authorization: str | None = Header(None)) -> dict:
+    """Personalized start-my-day briefing (latest changes, open questions, projects, ops)."""
+    tok = auth.parse_token(authorization)
+    if not tok:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    cid, groups, role = _identity(company_id, authorization)
+    return briefing_mod.my_briefing(_db(), cid, tok["username"], role, groups=groups)
 
 
 @app.get("/projects")

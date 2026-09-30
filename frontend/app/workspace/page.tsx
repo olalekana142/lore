@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { analyzeMeeting, listProjects, createProject, addProjectEntries, type MeetingAnalysis, type ProjectSummary } from "@/lib/api";
 import { useCompany } from "@/lib/useCompany";
+import DocIntelligence from "../components/DocIntelligence";
 import { PageHeader, ErrorNote } from "../components/ui";
 import { IconSparkle, IconCheck, IconGap, IconHealth, IconCopy, IconChat } from "../components/icons";
 
@@ -213,6 +214,8 @@ export default function WorkspacePage() {
           )}
         </div>
       )}
+
+      <DocIntelligence companyId={companyId} />
     </div>
   );
 }

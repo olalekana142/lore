@@ -426,6 +426,24 @@ export async function askProject(companyId: string, projectId: string, question:
   }));
 }
 
+export interface DocIntel { mode: string; label: string; content: string }
+export async function analyzeDocument(companyId: string, text: string, mode: string): Promise<DocIntel> {
+  return j(await fetch(`${BASE}/docint/analyze`, {
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeader() },
+    body: JSON.stringify({ company_id: companyId, text, mode }),
+  }));
+}
+export interface DocCompare {
+  added: string[]; removed: string[]; changed: { was: string; now: string }[];
+  contradictions: string[]; review: string[];
+}
+export async function compareDocuments(companyId: string, textA: string, textB: string): Promise<DocCompare> {
+  return j(await fetch(`${BASE}/docint/compare`, {
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeader() },
+    body: JSON.stringify({ company_id: companyId, text_a: textA, text_b: textB }),
+  }));
+}
+
 export interface Composed { format: string; label: string; content: string }
 export async function composeAnswer(companyId: string, question: string, answer: string, format: string): Promise<Composed> {
   return j(await fetch(`${BASE}/compose`, {

@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from lore import actions, alerts as alerts_mod, analytics, auth, autopilot as autopilot_mod, briefing as briefing_mod, challenge, compose as compose_mod, escalations, feedback, glossary, health, knowledge, meetings, onboarding, projects as projects_mod, provenance, search as search_mod, simulate as simulate_mod
+from lore import actions, alerts as alerts_mod, analytics, auth, autopilot as autopilot_mod, briefing as briefing_mod, challenge, compose as compose_mod, docintel as docintel_mod, escalations, feedback, glossary, health, knowledge, meetings, onboarding, projects as projects_mod, provenance, search as search_mod, simulate as simulate_mod
 from lore.config import settings
 from lore.graph import queries
 from lore.graph.schema import get_connection, init_schema
@@ -647,6 +647,36 @@ def knowledge_check(req: DocRequest, authorization: str | None = Header(None)) -
 class ChallengeRequest(BaseModel):
     company_id: str
     question: str
+
+
+class DocIntelRequest(BaseModel):
+    company_id: str
+    text: str
+    mode: str = "summary"
+
+
+class DocCompareRequest(BaseModel):
+    company_id: str
+    text_a: str
+    text_b: str
+
+
+@app.post("/docint/analyze")
+def docint_analyze(req: DocIntelRequest, authorization: str | None = Header(None)) -> dict:
+    """Summarize / extract obligations / flag unusual clauses / pull action items from a pasted doc."""
+    _identity(req.company_id, authorization)
+    if not req.text.strip():
+        raise HTTPException(status_code=400, detail="no document text")
+    return docintel_mod.analyze(req.text, req.mode)
+
+
+@app.post("/docint/compare")
+def docint_compare(req: DocCompareRequest, authorization: str | None = Header(None)) -> dict:
+    """Compare two pasted documents: added / removed / changed / contradictions / to-review."""
+    _identity(req.company_id, authorization)
+    if not req.text_a.strip() or not req.text_b.strip():
+        raise HTTPException(status_code=400, detail="need both documents")
+    return docintel_mod.compare(req.text_a, req.text_b)
 
 
 class MeetingRequest(BaseModel):

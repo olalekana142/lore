@@ -670,6 +670,15 @@ def docint_analyze(req: DocIntelRequest, authorization: str | None = Header(None
     return docintel_mod.analyze(req.text, req.mode)
 
 
+@app.post("/docint/policy")
+def docint_policy(req: DocIntelRequest, authorization: str | None = Header(None)) -> dict:
+    """Check a pasted document's terms against the company's own policies (grounded, cited)."""
+    cid, groups, _ = _identity(req.company_id, authorization)
+    if not req.text.strip():
+        raise HTTPException(status_code=400, detail="no document text")
+    return docintel_mod.check_policies(_db(), cid, req.text, groups=groups)
+
+
 @app.post("/docint/compare")
 def docint_compare(req: DocCompareRequest, authorization: str | None = Header(None)) -> dict:
     """Compare two pasted documents: added / removed / changed / contradictions / to-review."""

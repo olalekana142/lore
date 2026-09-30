@@ -33,6 +33,21 @@ _GLOSSARY = [
 ]
 
 
+VENDOR_POLICY_TEXT = (
+    "Vendor & Procurement Policy. "
+    "Standard payment terms for all vendor contracts are Net 60; shorter terms require Finance approval. "
+    "Annual price increases in vendor agreements are capped at 7 percent unless approved by Procurement. "
+    "Auto-renewal cancellation notice must not exceed 60 days. "
+    "Vendors must notify Acme of any security incident or data breach within 72 hours of discovery. "
+    "Any vendor that processes Acme data must hold current SOC 2 Type II certification. "
+    "Vendors may process Acme data only to deliver the contracted service and must not use Acme data to "
+    "train their own models or share it with third parties without Acme's written consent. "
+    "Every contract must include a mutual limitation of liability; Acme's liability must never be uncapped. "
+    "Vendors may not subcontract their obligations without Acme's prior written consent. "
+    "All new vendor contracts and renewals over 25,000 dollars per year require Procurement and Legal review."
+)
+
+
 def _already_seeded(conn) -> bool:
     res = conn.execute(
         "MATCH (c:Company {id:$id})-[:OWNS]->(d:Document) RETURN d.id LIMIT 1",
@@ -83,6 +98,12 @@ def main() -> None:
     # legacy FAQ in retrieval + conflict resolution).
     analytics.set_canonical(conn, "upload:pto-policy", True)
     print("[seed] temporal: FAQ superseded (2026-07-31); authorities set; PTO policy canonical")
+
+    # Vendor & Procurement Policy — gives Lore terms to check third-party contracts against.
+    vp = ingest_text(COMPANY, "Vendor & Procurement Policy", VENDOR_POLICY_TEXT)
+    for did in vp.get("doc_ids", []):
+        analytics.verify_document(conn, did, "Procurement")
+    print("[seed] vendor & procurement policy")
 
     # Permissions demo: an HR-only document + a few users in different groups.
     from lore import auth

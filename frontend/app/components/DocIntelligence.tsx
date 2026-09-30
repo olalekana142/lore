@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { analyzeDocument, compareDocuments, type DocIntel, type DocCompare } from "@/lib/api";
+import { analyzeDocument, compareDocuments, checkDocPolicies, type DocIntel, type DocCompare, type DocPolicyCheck } from "@/lib/api";
 import AnswerText from "./AnswerText";
-import { IconDoc, IconCopy, IconArrow } from "./icons";
+import { IconDoc, IconCopy, IconArrow, IconHealth } from "./icons";
 
 const MODES: [string, string][] = [
   ["summary", "Summarize"], ["obligations", "Obligations"], ["risks", "Unusual clauses"], ["actions", "Action items"],
@@ -17,6 +17,7 @@ export default function DocIntelligence({ companyId }: { companyId: string }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [res, setRes] = useState<DocIntel | null>(null);
   const [copied, setCopied] = useState(false);
+  const [policy, setPolicy] = useState<DocPolicyCheck | null>(null);
 
   // compare
   const [a, setA] = useState("");
@@ -26,8 +27,13 @@ export default function DocIntelligence({ companyId }: { companyId: string }) {
 
   async function analyze(mode: string) {
     if (!text.trim()) return;
-    setBusy(mode); setRes(null);
+    setBusy(mode); setRes(null); setPolicy(null);
     try { setRes(await analyzeDocument(companyId, text, mode)); } finally { setBusy(null); }
+  }
+  async function runPolicy() {
+    if (!text.trim()) return;
+    setBusy("policy"); setRes(null); setPolicy(null);
+    try { setPolicy(await checkDocPolicies(companyId, text)); } finally { setBusy(null); }
   }
   async function compare() {
     if (!a.trim() || !b.trim()) return;
@@ -63,7 +69,39 @@ export default function DocIntelligence({ companyId }: { companyId: string }) {
                 {busy === mode ? "…" : label}
               </button>
             ))}
+            <button onClick={runPolicy} disabled={!!busy || !text.trim()}
+              className="inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50"
+              style={{ borderColor: "var(--accent)", color: "var(--accent)" }}>
+              <IconHealth size={13} /> {busy === "policy" ? "Checking…" : "Check our policies"}
+            </button>
           </div>
+
+          {policy && (
+            <div className="animate-scale-in mt-3">
+              {policy.conflicts.length > 0 ? (
+                <div className="rounded-xl border-l-4 bg-surface-2 p-3" style={{ borderLeftColor: "var(--amber)" }}>
+                  <div className="mb-2 text-sm font-semibold" style={{ color: "var(--amber)" }}>
+                    ⚠ {policy.conflicts.length} term{policy.conflicts.length > 1 ? "s" : ""} conflict with company policy
+                  </div>
+                  <ul className="space-y-2">
+                    {policy.conflicts.map((c, i) => (
+                      <li key={i} className="rounded-lg bg-surface p-2.5 text-sm">
+                        <div className="font-medium">“{c.term}”</div>
+                        <div className="mt-0.5 text-xs text-muted-dim">{c.issue}{c.source && <> · per <b>{c.source}</b></>}</div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <div className="rounded-xl bg-surface-2 p-3 text-sm" style={{ color: "var(--green)" }}>
+                  ✓ No conflicts found with company policy{policy.terms_checked ? ` (${policy.terms_checked} terms checked)` : ""}.
+                </div>
+              )}
+              {policy.checked_against.length > 0 && (
+                <p className="mt-1.5 text-xs text-muted-dim">Checked against: {policy.checked_against.join(", ")}</p>
+              )}
+            </div>
+          )}
           {res && (
             <div className="animate-scale-in mt-3 rounded-xl border border-border bg-surface-2 p-3">
               <div className="mb-1.5 flex items-center justify-between">

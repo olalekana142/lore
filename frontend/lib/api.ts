@@ -433,6 +433,17 @@ export async function analyzeDocument(companyId: string, text: string, mode: str
     body: JSON.stringify({ company_id: companyId, text, mode }),
   }));
 }
+export interface DocPolicyCheck {
+  conflicts: { term: string; issue: string; source: string }[];
+  checked_against: string[]; terms_checked: number;
+}
+export async function checkDocPolicies(companyId: string, text: string): Promise<DocPolicyCheck> {
+  return j(await fetch(`${BASE}/docint/policy`, {
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeader() },
+    body: JSON.stringify({ company_id: companyId, text }),
+  }));
+}
+
 export interface DocCompare {
   added: string[]; removed: string[]; changed: { was: string; now: string }[];
   contradictions: string[]; review: string[];

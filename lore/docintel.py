@@ -51,6 +51,69 @@ DOCUMENT B:
 """
 
 
+_TERMS_PROMPT = """Extract the concrete terms, commitments and obligations from this document
+(payment terms, notice periods, data handling, liability, security, subcontracting, pricing,
+renewal, approvals). Return ONLY JSON: {{"terms": ["one term per item, stated plainly", "..."]}}
+
+DOCUMENT:
+\"\"\"{text}\"\"\"
+"""
+
+_POLICY_PROMPT = """You check a document's terms against official COMPANY POLICY.
+
+COMPANY POLICY FACTS (each tagged with its source document):
+{facts}
+
+TERMS FROM THE DOCUMENT:
+{terms}
+
+For any term that CONTRADICTS or violates the company policy facts, return it. Ignore terms
+that are consistent or simply not addressed by policy. Return ONLY JSON:
+{{"conflicts": [{{"term": "<the document term>", "issue": "<=20 words on the conflict>", "source": "<source document title>"}}]}}
+"""
+
+
+def check_policies(conn, company_id: str, text: str, groups: list[str] | None = None) -> dict:
+    """Check a pasted document's terms against the company's own policies, grounded in the KB."""
+    from lore.retrieval.answer import retrieve
+
+    raw = complete(_TERMS_PROMPT.format(text=text[:8000]), model=settings.generation_model,
+                   max_tokens=600, temperature=0.1, json_mode=True)
+    try:
+        terms = [t for t in json.loads(raw[raw.find("{"): raw.rfind("}") + 1]).get("terms", [])
+                 if isinstance(t, str) and t.strip()]
+    except (json.JSONDecodeError, ValueError):
+        terms = []
+    if not terms:
+        return {"conflicts": [], "checked_against": [], "terms_checked": 0}
+
+    seen: set[str] = set()
+    pooled: list[dict] = []
+    titles: list[str] = []
+    for t in terms[:10]:
+        r = retrieve(conn, company_id, t, top_k=4, groups=groups)
+        for f in r["facts"]:
+            if f["statement"] not in seen:
+                seen.add(f["statement"])
+                pooled.append(f)
+        for s in r["sources"]:
+            if s["title"] not in titles:
+                titles.append(s["title"])
+    if not pooled:
+        return {"conflicts": [], "checked_against": [], "terms_checked": len(terms)}
+
+    facts = "\n".join(f'- "{f["statement"]}" (source: {f["title"]})' for f in pooled)
+    tl = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(terms))
+    raw2 = complete(_POLICY_PROMPT.format(facts=facts, terms=tl), model=settings.generation_model,
+                    max_tokens=700, temperature=0.0, json_mode=True, reasoning_effort="low")
+    try:
+        conflicts = [c for c in json.loads(raw2[raw2.find("{"): raw2.rfind("}") + 1]).get("conflicts", [])
+                     if isinstance(c, dict) and c.get("term")]
+    except (json.JSONDecodeError, ValueError):
+        conflicts = []
+    return {"conflicts": conflicts, "checked_against": titles, "terms_checked": len(terms)}
+
+
 def compare(text_a: str, text_b: str) -> dict:
     raw = complete(_COMPARE_PROMPT.format(a=text_a[:6000], b=text_b[:6000]),
                    model=settings.generation_model, max_tokens=900, temperature=0.1, json_mode=True)

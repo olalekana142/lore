@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { analyzeMeeting, listProjects, createProject, addProjectEntries, type MeetingAnalysis, type ProjectSummary } from "@/lib/api";
 import { useCompany } from "@/lib/useCompany";
 import DocIntelligence from "../components/DocIntelligence";
+import AnswerText from "../components/AnswerText";
 import { PageHeader, ErrorNote } from "../components/ui";
 import { IconSparkle, IconCheck, IconGap, IconHealth, IconCopy, IconChat } from "../components/icons";
 
@@ -203,7 +204,7 @@ export default function WorkspacePage() {
                   <IconCopy size={13} /> {copied ? "Copied" : "Copy"}
                 </button>
               </div>
-              <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-surface-2 p-3 text-sm leading-relaxed">{res.follow_up_email}</pre>
+              <div className="mt-2 rounded-lg bg-surface-2 p-3 text-sm"><AnswerText text={res.follow_up_email} /></div>
             </section>
           )}
 

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { analyzeDocument, compareDocuments, type DocIntel, type DocCompare } from "@/lib/api";
+import AnswerText from "./AnswerText";
 import { IconDoc, IconCopy, IconArrow } from "./icons";
 
 const MODES: [string, string][] = [
@@ -69,7 +70,7 @@ export default function DocIntelligence({ companyId }: { companyId: string }) {
                 <span className="text-xs font-semibold text-muted-dim">{res.label}</span>
                 <button onClick={copy} className="inline-flex items-center gap-1 text-xs text-muted hover:text-foreground"><IconCopy size={13} /> {copied ? "Copied" : "Copy"}</button>
               </div>
-              <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">{res.content}</pre>
+              <div className="text-sm"><AnswerText text={res.content} /></div>
             </div>
           )}
         </>

@@ -22,6 +22,8 @@ export default function AnswerText({
               <li key={j}>{renderInline(it, onCite)}</li>
             ))}
           </ul>
+        ) : b.type === "h" ? (
+          <div key={i} className="answer-h">{renderInline(b.text, onCite)}</div>
         ) : (
           <p key={i}>{renderInline(b.text, onCite)}</p>
         ),
@@ -30,7 +32,7 @@ export default function AnswerText({
   );
 }
 
-type Block = { type: "p"; text: string } | { type: "ul"; items: string[] };
+type Block = { type: "p"; text: string } | { type: "ul"; items: string[] } | { type: "h"; text: string };
 
 function parseBlocks(text: string): Block[] {
   const lines = text.split("\n");
@@ -49,10 +51,17 @@ function parseBlocks(text: string): Block[] {
 
   for (const raw of lines) {
     const line = raw.trimEnd();
+    const heading = line.match(/^\s*#{1,6}\s+(.*)/);
     const bullet = line.match(/^\s*[-*•]\s+(.*)/) || line.match(/^\s*\d+[.)]\s+(.*)/);
-    if (bullet) {
+    if (heading) {
       flushPara();
-      list.push(bullet[1]);
+      flushList();
+      blocks.push({ type: "h", text: heading[1].replace(/\*\*/g, "") });
+    } else if (bullet) {
+      flushPara();
+      // render "- [ ] task" / "- [x] task" as a checkbox item
+      const cb = bullet[1].match(/^\[([ xX])\]\s*(.*)/);
+      list.push(cb ? `${cb[1].trim() ? "☑" : "☐"} ${cb[2]}` : bullet[1]);
     } else if (!line.trim()) {
       flushPara();
       flushList();

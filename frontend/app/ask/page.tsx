@@ -398,7 +398,7 @@ function AssistantBubble({ msg, companyId, question }: { msg: Msg; companyId: st
                     <IconCopy size={13} /> {copied ? "Copied" : "Copy"}
                   </button>
                 </div>
-                <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">{composed.content}</pre>
+                <div className="text-sm"><AnswerText text={composed.content} /></div>
               </div>
             )}
           </div>

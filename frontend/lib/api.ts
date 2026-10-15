@@ -367,6 +367,31 @@ export async function getAutopilot(companyId: string): Promise<Autopilot> {
   return j(await fetch(`${BASE}/autopilot?${qs({ company_id: companyId })}`, { headers: authHeader() }));
 }
 
+export interface Deliverable {
+  id: string; kind: string; title: string; content: string;
+  sources: Source[]; grounded: boolean; needs_review: boolean; project_id: string | null;
+}
+export interface DeliverableSummary {
+  id: string; kind: string; title: string; source_count: number; status: string;
+  created_by: string; project_id: string | null; created_at: string | null;
+}
+export interface DeliverableDetail {
+  id: string; kind: string; title: string; goal: string; content: string;
+  source_titles: string[]; status: string; created_at: string | null;
+}
+export async function generateDeliverable(companyId: string, kind: string, goal: string, projectId?: string | null): Promise<Deliverable> {
+  return j(await fetch(`${BASE}/deliverables/generate`, {
+    method: "POST", headers: { "Content-Type": "application/json", ...authHeader() },
+    body: JSON.stringify({ company_id: companyId, kind, goal, project_id: projectId ?? null }),
+  }));
+}
+export async function listDeliverables(companyId: string): Promise<DeliverableSummary[]> {
+  return j(await fetch(`${BASE}/deliverables?${qs({ company_id: companyId })}`, { headers: authHeader() }));
+}
+export async function getDeliverable(companyId: string, id: string): Promise<DeliverableDetail> {
+  return j(await fetch(`${BASE}/deliverables/${encodeURIComponent(id)}?${qs({ company_id: companyId })}`, { headers: authHeader() }));
+}
+
 export interface Briefing {
   name: string; role: string;
   recent_changes: { doc_id: string; title: string; version: number; updated_at: string | null; changed: boolean }[];

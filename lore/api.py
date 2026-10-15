@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from lore import actions, alerts as alerts_mod, analytics, auth, autopilot as autopilot_mod, briefing as briefing_mod, challenge, compose as compose_mod, docintel as docintel_mod, escalations, feedback, glossary, health, knowledge, meetings, onboarding, projects as projects_mod, provenance, search as search_mod, simulate as simulate_mod
+from lore import actions, alerts as alerts_mod, analytics, auth, autopilot as autopilot_mod, briefing as briefing_mod, challenge, compose as compose_mod, deliverables as deliverables_mod, docintel as docintel_mod, escalations, feedback, glossary, health, knowledge, meetings, onboarding, projects as projects_mod, provenance, search as search_mod, simulate as simulate_mod
 from lore.config import settings
 from lore.graph import queries
 from lore.graph.schema import get_connection, init_schema
@@ -723,6 +723,39 @@ class ProjectEntriesRequest(BaseModel):
 class ProjectAskRequest(BaseModel):
     company_id: str
     question: str
+
+
+class DeliverableRequest(BaseModel):
+    company_id: str
+    kind: str
+    goal: str
+    project_id: str | None = None
+
+
+@app.post("/deliverables/generate")
+def generate_deliverable(req: DeliverableRequest, authorization: str | None = Header(None)) -> dict:
+    """Draft a finished, grounded, cited deliverable from company knowledge (+ a project). Member+."""
+    cid, groups, _ = _require(authorization, "member")
+    tok = auth.parse_token(authorization) or {}
+    if not req.goal.strip():
+        raise HTTPException(status_code=400, detail="describe what you need")
+    return deliverables_mod.generate(_db(), cid, req.kind, req.goal, project_id=req.project_id,
+                                     created_by=tok.get("username", ""), groups=groups)
+
+
+@app.get("/deliverables")
+def list_deliverables(company_id: str, authorization: str | None = Header(None)) -> list[dict]:
+    cid, _, _ = _require(authorization, "member")
+    return deliverables_mod.list_deliverables(_db(), cid)
+
+
+@app.get("/deliverables/{deliverable_id}")
+def get_deliverable(deliverable_id: str, company_id: str, authorization: str | None = Header(None)) -> dict:
+    cid, _, _ = _require(authorization, "member")
+    res = deliverables_mod.get_deliverable(_db(), cid, deliverable_id)
+    if res is None:
+        raise HTTPException(status_code=404, detail="deliverable not found")
+    return res
 
 
 @app.get("/me/briefing")

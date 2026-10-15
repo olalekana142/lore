@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { analyzeMeeting, listProjects, createProject, addProjectEntries, type MeetingAnalysis, type ProjectSummary } from "@/lib/api";
 import { useCompany } from "@/lib/useCompany";
 import DocIntelligence from "../components/DocIntelligence";
+import DeliverableStudio from "../components/DeliverableStudio";
+import RecentWork from "../components/RecentWork";
 import AnswerText from "../components/AnswerText";
 import { PageHeader, ErrorNote } from "../components/ui";
 import { IconSparkle, IconCheck, IconGap, IconHealth, IconCopy, IconChat } from "../components/icons";
@@ -27,6 +29,7 @@ export default function WorkspacePage() {
   const [newProj, setNewProj] = useState("");
   const [saved, setSaved] = useState(0);
   const [savingProj, setSavingProj] = useState(false);
+  const [deliverableKey, setDeliverableKey] = useState(0);
 
   useEffect(() => { listProjects(companyId).then(setProjects).catch(() => {}); }, [companyId]);
 
@@ -81,9 +84,18 @@ export default function WorkspacePage() {
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader
-        title="Workspace"
-        subtitle="Get work done with Lore — grounded in what your company actually knows."
+        title="Your workspace"
+        subtitle="Turn company knowledge into completed work — drafted, grounded, and ready for you to review."
       />
+
+      <div className="space-y-4">
+        <DeliverableStudio companyId={companyId} onCreated={() => setDeliverableKey((k) => k + 1)} />
+        <RecentWork companyId={companyId} refreshKey={deliverableKey} />
+      </div>
+
+      <div className="mb-3 mt-8 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-dim">
+        <span className="h-px flex-1 bg-border" /> More tools <span className="h-px flex-1 bg-border" />
+      </div>
 
       <section className="animate-fade-up card p-5">
         <h2 className="flex items-center gap-2 text-sm font-semibold">

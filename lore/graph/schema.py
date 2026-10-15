@@ -85,6 +85,13 @@ NODE_TABLES = [
         id STRING, project_id STRING, kind STRING, title STRING, body STRING,
         owner STRING, due STRING, created_at TIMESTAMP, PRIMARY KEY(id)
     )""",
+    # A finished work product generated from company knowledge (optionally a project's memory):
+    # grounded in real sources, kept as the person's "recent work" with a review status.
+    """CREATE NODE TABLE IF NOT EXISTS Deliverable(
+        id STRING, company_id STRING, kind STRING, title STRING, goal STRING, content STRING,
+        source_titles STRING[], source_count INT64, project_id STRING, created_by STRING,
+        status STRING, created_at TIMESTAMP, PRIMARY KEY(id)
+    )""",
 ]
 
 # --- Relationship tables ---
@@ -99,6 +106,7 @@ REL_TABLES = [
     "CREATE REL TABLE IF NOT EXISTS GENERATED(FROM Company TO Answer)",
     "CREATE REL TABLE IF NOT EXISTS HAS_PROJECT(FROM Company TO Project)",
     "CREATE REL TABLE IF NOT EXISTS HAS_ENTRY(FROM Project TO ProjectEntry)",
+    "CREATE REL TABLE IF NOT EXISTS HAS_DELIVERABLE(FROM Company TO Deliverable)",
 ]
 
 

@@ -24,6 +24,16 @@ export default function AnswerText({
           </ul>
         ) : b.type === "h" ? (
           <div key={i} className="answer-h">{renderInline(b.text, onCite)}</div>
+        ) : b.type === "table" ? (
+          <table key={i} className="answer-table"><tbody>
+            {b.rows.map((row, ri) => (
+              <tr key={ri}>
+                {row.map((cell, ci) => ri === 0
+                  ? <th key={ci}>{renderInline(cell, onCite)}</th>
+                  : <td key={ci}>{renderInline(cell, onCite)}</td>)}
+              </tr>
+            ))}
+          </tbody></table>
         ) : (
           <p key={i}>{renderInline(b.text, onCite)}</p>
         ),
@@ -32,13 +42,15 @@ export default function AnswerText({
   );
 }
 
-type Block = { type: "p"; text: string } | { type: "ul"; items: string[] } | { type: "h"; text: string };
+type Block = { type: "p"; text: string } | { type: "ul"; items: string[] } | { type: "h"; text: string } | { type: "table"; rows: string[][] };
 
 function parseBlocks(text: string): Block[] {
-  const lines = text.split("\n");
+  // normalize HTML line breaks the model sometimes emits
+  const lines = text.replace(/<br\s*\/?>/gi, "\n").split("\n");
   const blocks: Block[] = [];
   let para: string[] = [];
   let list: string[] = [];
+  let table: string[][] = [];
 
   const flushPara = () => {
     if (para.length) blocks.push({ type: "p", text: para.join(" ") });
@@ -48,30 +60,49 @@ function parseBlocks(text: string): Block[] {
     if (list.length) blocks.push({ type: "ul", items: list });
     list = [];
   };
+  const flushTable = () => {
+    if (table.length) blocks.push({ type: "table", rows: table });
+    table = [];
+  };
 
   for (const raw of lines) {
     const line = raw.trimEnd();
+    const trimmed = line.trim();
     const heading = line.match(/^\s*#{1,6}\s+(.*)/);
     const bullet = line.match(/^\s*[-*•]\s+(.*)/) || line.match(/^\s*\d+[.)]\s+(.*)/);
+    const isRow = trimmed.startsWith("|") && trimmed.endsWith("|") && trimmed.length > 1;
+    if (isRow) {
+      flushPara();
+      flushList();
+      const cells = trimmed.slice(1, -1).split("|").map((c) => c.trim());
+      const sep = cells.every((c) => /^:?-{2,}:?$/.test(c) || c === "");
+      if (!sep) table.push(cells);
+      continue;
+    }
     if (heading) {
       flushPara();
       flushList();
+      flushTable();
       blocks.push({ type: "h", text: heading[1].replace(/\*\*/g, "") });
     } else if (bullet) {
       flushPara();
+      flushTable();
       // render "- [ ] task" / "- [x] task" as a checkbox item
       const cb = bullet[1].match(/^\[([ xX])\]\s*(.*)/);
       list.push(cb ? `${cb[1].trim() ? "☑" : "☐"} ${cb[2]}` : bullet[1]);
-    } else if (!line.trim()) {
+    } else if (!trimmed) {
       flushPara();
       flushList();
+      flushTable();
     } else {
       flushList();
-      para.push(line.trim());
+      flushTable();
+      para.push(trimmed);
     }
   }
   flushPara();
   flushList();
+  flushTable();
   return blocks;
 }
 

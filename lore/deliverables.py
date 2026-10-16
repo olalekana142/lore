@@ -53,7 +53,10 @@ def generate(conn: kuzu.Connection, company_id: str, kind: str, goal: str,
         f"You produce {descr} for a company employee. Use ONLY the company facts and project "
         "memory below — do not invent facts, numbers, names or policies. Cite company facts "
         "inline as [n]. If something needed isn't supported, write [TODO: …] so a human fills "
-        "it in. Output only the deliverable, no preamble.\n\n"
+        "it in.\n"
+        "FORMAT as clean Markdown: a short '# Title', '## Section' headings, concise paragraphs, "
+        "'-' bullets and '1.' numbered steps, and **bold** for labels. Do NOT use HTML tags such "
+        "as <br>. Output only the deliverable, no preamble.\n\n"
         f"TASK: {goal}\n\nCOMPANY FACTS:\n{fact_lines}\n{project_ctx}"
     )
     content = complete(prompt, model=settings.generation_model, max_tokens=1100, temperature=0.3).strip()

@@ -367,6 +367,15 @@ export async function getAutopilot(companyId: string): Promise<Autopilot> {
   return j(await fetch(`${BASE}/autopilot?${qs({ company_id: companyId })}`, { headers: authHeader() }));
 }
 
+export interface WorkspaceHome {
+  active_work: { title: string; kind: string; desc: string; status: string; status_label: string; context: string; tag: string; href: string; updated: string | null }[];
+  company_signals: { icon: string; title: string; detail: string; href: string; when: string | null }[];
+  recent_work: { id: string; title: string; type: string; type_key: string; context: string; status: string; status_label: string; grounded: boolean; source_count: number; updated: string | null; href: string }[];
+}
+export async function getWorkspaceHome(companyId: string): Promise<WorkspaceHome> {
+  return j(await fetch(`${BASE}/workspace/home?${qs({ company_id: companyId })}`, { headers: authHeader() }));
+}
+
 export interface Deliverable {
   id: string; kind: string; title: string; content: string;
   sources: Source[]; grounded: boolean; needs_review: boolean; project_id: string | null;

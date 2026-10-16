@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { analyzeMeeting, listProjects, createProject, addProjectEntries, type MeetingAnalysis, type ProjectSummary } from "@/lib/api";
 import { useCompany } from "@/lib/useCompany";
 import DocIntelligence from "../components/DocIntelligence";
 import DeliverableStudio from "../components/DeliverableStudio";
-import RecentWork from "../components/RecentWork";
+import WorkspaceDashboard from "../components/WorkspaceDashboard";
 import AnswerText from "../components/AnswerText";
-import { PageHeader, ErrorNote } from "../components/ui";
-import { IconSparkle, IconCheck, IconGap, IconHealth, IconCopy, IconChat } from "../components/icons";
+import { ErrorNote } from "../components/ui";
+import { IconSparkle, IconCheck, IconGap, IconHealth, IconCopy, IconChat, IconSearch } from "../components/icons";
 
 const SAMPLE = `Priya: Thanks everyone. First, PTO — HR confirmed full-timers now get 25 days, effective this year.
 Dan: Good. For the Acme migration, we've decided to standardize on PostgreSQL. Owner is Sam, target end of Q1.
@@ -19,6 +20,8 @@ Dan: Action: Maria to draft the updated travel guidance by Friday.`;
 
 export default function WorkspacePage() {
   const [companyId] = useCompany();
+  const router = useRouter();
+  const [ask, setAsk] = useState("");
   const [transcript, setTranscript] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,22 +85,36 @@ export default function WorkspacePage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <PageHeader
-        title="Your workspace"
-        subtitle="Turn company knowledge into completed work — drafted, grounded, and ready for you to review."
-      />
+    <div className="mx-auto max-w-6xl">
+      {/* Top bar */}
+      <header className="animate-fade-up mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Your workspace</h1>
+          <p className="mt-1 text-sm text-muted">Turn company knowledge into completed work.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <form onSubmit={(e) => { e.preventDefault(); if (ask.trim()) router.push(`/ask?q=${encodeURIComponent(ask.trim())}`); }} className="relative">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-dim"><IconSearch size={16} /></span>
+            <input value={ask} onChange={(e) => setAsk(e.target.value)} placeholder="Ask anything about how we work…" className="input w-72 max-w-full py-2.5 pl-9 pr-3 text-sm" />
+          </form>
+          <button onClick={() => document.getElementById("create")?.scrollIntoView({ behavior: "smooth" })} className="btn-primary flex shrink-0 items-center gap-1.5 px-4 py-2.5 text-sm">
+            <IconSparkle size={16} /> New task
+          </button>
+        </div>
+      </header>
 
-      <div className="space-y-4">
+      <WorkspaceDashboard companyId={companyId} refreshKey={deliverableKey} />
+
+      <div className="mb-3 mt-9 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-dim">
+        <span className="h-px flex-1 bg-border" /> Tools <span className="h-px flex-1 bg-border" />
+      </div>
+
+      <div className="mx-auto max-w-3xl space-y-4">
+      <div id="create">
         <DeliverableStudio companyId={companyId} onCreated={() => setDeliverableKey((k) => k + 1)} />
-        <RecentWork companyId={companyId} refreshKey={deliverableKey} />
       </div>
 
-      <div className="mb-3 mt-8 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-dim">
-        <span className="h-px flex-1 bg-border" /> More tools <span className="h-px flex-1 bg-border" />
-      </div>
-
-      <section className="animate-fade-up card p-5">
+      <section id="meeting" className="animate-fade-up card p-5">
         <h2 className="flex items-center gap-2 text-sm font-semibold">
           <span className="text-accent"><IconSparkle size={16} /></span> Meeting intelligence
         </h2>
@@ -228,7 +245,10 @@ export default function WorkspacePage() {
         </div>
       )}
 
-      <DocIntelligence companyId={companyId} />
+      <div id="document">
+        <DocIntelligence companyId={companyId} />
+      </div>
+      </div>
     </div>
   );
 }

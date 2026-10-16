@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from lore import actions, alerts as alerts_mod, analytics, auth, autopilot as autopilot_mod, briefing as briefing_mod, challenge, compose as compose_mod, deliverables as deliverables_mod, docintel as docintel_mod, escalations, feedback, glossary, health, knowledge, meetings, onboarding, projects as projects_mod, provenance, search as search_mod, simulate as simulate_mod
+from lore import actions, alerts as alerts_mod, analytics, auth, autopilot as autopilot_mod, briefing as briefing_mod, challenge, compose as compose_mod, deliverables as deliverables_mod, docintel as docintel_mod, escalations, feedback, glossary, health, knowledge, meetings, onboarding, projects as projects_mod, provenance, search as search_mod, simulate as simulate_mod, workspace as workspace_mod
 from lore.config import settings
 from lore.graph import queries
 from lore.graph.schema import get_connection, init_schema
@@ -741,6 +741,13 @@ def generate_deliverable(req: DeliverableRequest, authorization: str | None = He
         raise HTTPException(status_code=400, detail="describe what you need")
     return deliverables_mod.generate(_db(), cid, req.kind, req.goal, project_id=req.project_id,
                                      created_by=tok.get("username", ""), groups=groups)
+
+
+@app.get("/workspace/home")
+def workspace_home(company_id: str, authorization: str | None = Header(None)) -> dict:
+    """Assembled 'work gets done' dashboard: active work, company signals, recent work. Member+."""
+    cid, groups, _ = _require(authorization, "member")
+    return workspace_mod.workspace_home(_db(), cid, groups=groups)
 
 
 @app.get("/deliverables")

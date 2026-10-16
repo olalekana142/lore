@@ -43,35 +43,47 @@ def workspace_home(conn: kuzu.Connection, company_id: str, groups: list[str] | N
     recurring = [g for g in gaps if int(g.get("asked_count") or 0) >= 2]
 
     # ---- active work (pick up where you left off) ----
-    active: list[dict] = []
+    # Derive signals, then MATERIALIZE them as stateful WorkItems (keyed by source_ref) so a
+    # person can assign an owner / mark done and the dashboard remembers it.
+    from lore import workitems
+
+    signals: list[dict] = []
     for d in delivs:
         if d["status"] == "draft":
-            active.append({
-                "title": d["title"], "kind": "deliverable",
-                "desc": f"{d['kind'].upper()} drafted from company knowledge — review before it goes out.",
-                "status": "review", "status_label": "Ready for review",
+            signals.append({
+                "source_ref": f"deliverable:{d['id']}", "kind": "deliverable", "title": d["title"],
+                "detail": f"{d['kind'].upper()} drafted from company knowledge — review before it goes out.",
                 "context": f"{d['source_count']} source{'s' if d['source_count'] != 1 else ''}",
-                "tag": d["kind"], "href": "/workspace#recent", "updated": d["created_at"],
+                "tag": d["kind"], "href": "/workspace#recent",
             })
     for p in sorted(projs, key=lambda x: open_q.get(x["id"], 0), reverse=True):
         oq = open_q.get(p["id"], 0)
         if oq > 0:
-            active.append({
-                "title": p["name"], "kind": "project",
-                "desc": "Open questions and decisions in this project's memory.",
-                "status": "progress", "status_label": "In progress",
+            signals.append({
+                "source_ref": f"project:{p['id']}", "kind": "project", "title": p["name"],
+                "detail": "Open questions and decisions in this project's memory.",
                 "context": f"{oq} open question{'s' if oq != 1 else ''}",
-                "tag": "project", "href": f"/projects/{p['id']}", "updated": p["created_at"],
+                "tag": "project", "href": f"/projects/{p['id']}",
             })
     for g in recurring[:3]:
-        active.append({
-            "title": f"Resolve repeated question: {g['question'][:60]}", "kind": "gap",
-            "desc": "Create or update documentation for this recurring question.",
-            "status": "owner", "status_label": "Needs owner",
-            "context": f"asked {int(g['asked_count'])}×", "tag": g.get("topic") or "gap",
-            "href": "/gaps", "updated": _iso(g.get("last_asked")),
+        signals.append({
+            "source_ref": f"gap:{g['question']}", "kind": "gap",
+            "title": f"Resolve repeated question: {g['question'][:60]}",
+            "detail": "Create or update documentation for this recurring question.",
+            "context": f"asked {int(g['asked_count'])}×", "tag": g.get("topic") or "gap", "href": "/gaps",
         })
-    active = active[:5]
+    workitems.materialize(conn, company_id, signals)
+    # keep the list MIXED: at most 3 per kind so a pile of drafts can't hide a project or a
+    # recurring question that needs an owner
+    per_kind: dict[str, int] = {}
+    active = []
+    for w in workitems.list_workitems(conn, company_id):
+        if per_kind.get(w["kind"], 0) >= 3:
+            continue
+        per_kind[w["kind"]] = per_kind.get(w["kind"], 0) + 1
+        active.append(w)
+        if len(active) >= 7:
+            break
 
     # ---- company signals ----
     signals: list[dict] = []

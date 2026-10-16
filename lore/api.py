@@ -750,6 +750,31 @@ def workspace_home(company_id: str, authorization: str | None = Header(None)) ->
     return workspace_mod.workspace_home(_db(), cid, groups=groups)
 
 
+class WorkItemUpdate(BaseModel):
+    company_id: str
+    status: str | None = None   # progress | review | owner | done
+    owner: str | None = None
+
+
+@app.get("/workitems")
+def list_workitems(company_id: str, include_done: bool = False, authorization: str | None = Header(None)) -> list[dict]:
+    """Stateful work items (materialized from dashboard signals)."""
+    from lore import workitems
+    cid, _, _ = _identity(company_id, authorization)
+    return workitems.list_workitems(_db(), cid, include_done=include_done)
+
+
+@app.patch("/workitems/{item_id}")
+def update_workitem(item_id: str, req: WorkItemUpdate, authorization: str | None = Header(None)) -> dict:
+    """Assign an owner and/or move a work item's status (e.g. mark done)."""
+    from lore import workitems
+    cid, _, _ = _identity(req.company_id, authorization)
+    res = workitems.update_workitem(_db(), cid, item_id, status=req.status, owner=req.owner)
+    if res is None:
+        raise HTTPException(status_code=404, detail="work item not found")
+    return res
+
+
 @app.get("/deliverables")
 def list_deliverables(company_id: str, authorization: str | None = Header(None)) -> list[dict]:
     cid, _, _ = _identity(company_id, authorization)

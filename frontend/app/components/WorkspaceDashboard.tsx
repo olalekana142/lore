@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { getWorkspaceHome, getDeliverable, type WorkspaceHome, type DeliverableDetail } from "@/lib/api";
+import { getWorkspaceHome, getDeliverable, updateWorkItem, type WorkspaceHome, type DeliverableDetail } from "@/lib/api";
+import { useAuth } from "@/lib/useAuth";
 import { relativeDate } from "@/lib/format";
 import AnswerText from "./AnswerText";
 import { IconDoc, IconUsers, IconCheck, IconGap, IconArrow, IconClock, IconBook, IconSparkle } from "./icons";
@@ -26,6 +27,14 @@ export default function WorkspaceDashboard({ companyId, refreshKey, onLaunch }: 
   const [data, setData] = useState<WorkspaceHome | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [detail, setDetail] = useState<DeliverableDetail | null>(null);
+  const { user } = useAuth();
+  const me = user?.username ?? user?.name ?? "me";
+  const [acting, setActing] = useState<string | null>(null);
+
+  async function act(id: string, patch: { status?: string; owner?: string }) {
+    setActing(id);
+    try { await updateWorkItem(companyId, id, patch); load(); } finally { setActing(null); }
+  }
 
   const load = useCallback(() => { getWorkspaceHome(companyId).then(setData).catch(() => {}); }, [companyId]);
   useEffect(() => { load(); }, [load, refreshKey]);
@@ -53,19 +62,26 @@ export default function WorkspaceDashboard({ companyId, refreshKey, onLaunch }: 
             <p className="py-6 text-center text-sm text-muted">Nothing in flight. Start something below. ✨</p>
           )}
           <div className="divide-y divide-border-soft">
-            {data?.active_work.map((w, i) => {
+            {data?.active_work.map((w) => {
               const st = STATUS[w.status] ?? STATUS.active;
               return (
-                <Link key={i} href={w.href} className="-mx-2 flex items-start gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-surface-2">
+                <div key={w.id} className="-mx-2 flex items-start gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-surface-2">
                   <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-accent-weak text-accent">
                     {w.kind === "project" ? <IconBook size={15} /> : w.kind === "gap" ? <IconGap size={15} /> : <IconDoc size={15} />}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium">{w.title}</div>
+                    <Link href={w.href} className="text-sm font-medium hover:text-accent">{w.title}</Link>
                     <div className="mt-0.5 text-xs text-muted">{w.desc}</div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-dim">
                       <span>{w.context}</span>
                       <span className="chip">{w.tag}</span>
+                      {w.owner && <span className="chip">@{w.owner}</span>}
+                      {!w.owner && (
+                        <button onClick={() => act(w.id, { owner: me })} disabled={acting === w.id} className="text-accent hover:underline">Assign to me</button>
+                      )}
+                      <button onClick={() => act(w.id, { status: "done" })} disabled={acting === w.id} className="text-muted hover:text-foreground">
+                        {acting === w.id ? "…" : "Mark done"}
+                      </button>
                     </div>
                   </div>
                   <div className="shrink-0 text-right">
@@ -74,7 +90,7 @@ export default function WorkspaceDashboard({ companyId, refreshKey, onLaunch }: 
                     </span>
                     <div className="mt-1 text-[11px] text-muted-dim">{relativeDate(w.updated)}</div>
                   </div>
-                </Link>
+                </div>
               );
             })}
           </div>

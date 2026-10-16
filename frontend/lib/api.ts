@@ -367,8 +367,22 @@ export async function getAutopilot(companyId: string): Promise<Autopilot> {
   return j(await fetch(`${BASE}/autopilot?${qs({ company_id: companyId })}`, { headers: authHeader() }));
 }
 
+export interface WorkItem {
+  id: string; source_ref: string; kind: string; title: string; desc: string; context: string; tag: string;
+  href: string; status: string; status_label: string; owner: string; created_at: string | null; updated: string | null;
+}
+export async function listWorkItems(companyId: string, includeDone = false): Promise<WorkItem[]> {
+  return j(await fetch(`${BASE}/workitems?${qs({ company_id: companyId, include_done: includeDone ? "true" : "false" })}`, { headers: authHeader() }));
+}
+export async function updateWorkItem(companyId: string, id: string, patch: { status?: string; owner?: string }): Promise<WorkItem> {
+  return j(await fetch(`${BASE}/workitems/${encodeURIComponent(id)}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json", ...authHeader() },
+    body: JSON.stringify({ company_id: companyId, ...patch }),
+  }));
+}
+
 export interface WorkspaceHome {
-  active_work: { title: string; kind: string; desc: string; status: string; status_label: string; context: string; tag: string; href: string; updated: string | null }[];
+  active_work: WorkItem[];
   company_signals: { icon: string; title: string; detail: string; href: string; when: string | null }[];
   recent_work: { id: string; title: string; type: string; type_key: string; context: string; status: string; status_label: string; grounded: boolean; source_count: number; updated: string | null; href: string }[];
 }

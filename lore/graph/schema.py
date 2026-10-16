@@ -92,6 +92,14 @@ NODE_TABLES = [
         source_titles STRING[], source_count INT64, project_id STRING, created_by STRING,
         status STRING, created_at TIMESTAMP, PRIMARY KEY(id)
     )""",
+    # A stateful unit of work on the dashboard. Signals (a draft to review, a recurring
+    # unanswered question, a project with open items) are MATERIALIZED into work items keyed by
+    # source_ref, so people can assign an owner and move them to done — not just read them.
+    """CREATE NODE TABLE IF NOT EXISTS WorkItem(
+        id STRING, company_id STRING, source_ref STRING, kind STRING, title STRING, detail STRING,
+        context STRING, tag STRING, href STRING, status STRING, owner STRING,
+        created_at TIMESTAMP, updated_at TIMESTAMP, PRIMARY KEY(id)
+    )""",
 ]
 
 # --- Relationship tables ---
@@ -107,6 +115,7 @@ REL_TABLES = [
     "CREATE REL TABLE IF NOT EXISTS HAS_PROJECT(FROM Company TO Project)",
     "CREATE REL TABLE IF NOT EXISTS HAS_ENTRY(FROM Project TO ProjectEntry)",
     "CREATE REL TABLE IF NOT EXISTS HAS_DELIVERABLE(FROM Company TO Deliverable)",
+    "CREATE REL TABLE IF NOT EXISTS HAS_WORKITEM(FROM Company TO WorkItem)",
 ]
 
 

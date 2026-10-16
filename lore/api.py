@@ -847,7 +847,9 @@ def analyze_meeting(req: MeetingRequest, authorization: str | None = Header(None
     cid, groups, _ = _identity(req.company_id, authorization)
     if not req.transcript.strip():
         raise HTTPException(status_code=400, detail="transcript is empty")
-    return meetings.analyze_meeting(_db(), cid, req.transcript, groups=groups)
+    tok = auth.parse_token(authorization) or {}
+    return meetings.analyze_meeting(_db(), cid, req.transcript, groups=groups,
+                                    created_by=tok.get("username", "") or "guest")
 
 
 @app.post("/answers/challenge")

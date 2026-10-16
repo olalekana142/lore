@@ -267,7 +267,7 @@ def work_eval(conn) -> dict:
         fails.append(f"redline policy check: {len(pc['conflicts'])} conflicts, {cue_hits}/{len(WORK_REDLINE_CUES)} cues")
 
     # --- meeting policy check: flag the real violations, don't flag the policy-consistent one ---
-    ma = meetings.analyze_meeting(conn, COMPANY, WORK_TRANSCRIPT, groups=PUBLIC)
+    ma = meetings.analyze_meeting(conn, COMPANY, WORK_TRANSCRIPT, groups=PUBLIC, persist=False)
     flagged = " ".join(c.get("decision", "") for c in ma["policy_conflicts"]).lower()
     meet_flags_ok = all(cue in flagged for cue in WORK_MEETING_FLAG_CUES)
     meet_noflag_ok = WORK_MEETING_NOFLAG_CUE not in flagged

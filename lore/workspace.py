@@ -114,11 +114,15 @@ def workspace_home(conn: kuzu.Connection, company_id: str, groups: list[str] | N
     # ---- recent work ----
     recent: list[dict] = []
     for d in delivs:
+        is_meeting = d["kind"] == "meeting"
         recent.append({
-            "id": d["id"], "title": d["title"], "type": "Generated", "type_key": "generated",
-            "context": f"{d['source_count']} source{'s' if d['source_count'] != 1 else ''}",
-            "status": "review" if d["status"] == "draft" else "done",
-            "status_label": "Draft — review before sharing" if d["status"] == "draft" else "Ready",
+            "id": d["id"], "title": d["title"],
+            "type": "Meeting" if is_meeting else "Generated", "type_key": "meeting" if is_meeting else "generated",
+            "context": (f"checked against {d['source_count']} source{'s' if d['source_count'] != 1 else ''}" if is_meeting
+                        else f"{d['source_count']} source{'s' if d['source_count'] != 1 else ''}"),
+            "status": "review" if d["status"] in ("draft", "review") else "done",
+            "status_label": ("Policy conflicts — review" if is_meeting and d["status"] == "review"
+                             else "Draft — review before sharing" if d["status"] == "draft" else "Complete"),
             "grounded": d["source_count"] > 0, "source_count": d["source_count"],
             "updated": d["created_at"], "href": "/workspace#recent",
         })
@@ -134,7 +138,7 @@ def workspace_home(conn: kuzu.Connection, company_id: str, groups: list[str] | N
         })
     # keep recent work MIXED too: newest 4 generated + newest 3 projects, then by recency
     recent.sort(key=lambda x: x["updated"] or "", reverse=True)
-    gen = [r for r in recent if r["type_key"] == "generated"][:4]
+    gen = [r for r in recent if r["type_key"] in ("generated", "meeting")][:4]
     proj = [r for r in recent if r["type_key"] == "project"][:3]
     recent = sorted(gen + proj, key=lambda x: x["updated"] or "", reverse=True)
 

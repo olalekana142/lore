@@ -29,8 +29,13 @@ def universal_search(conn: kuzu.Connection, company_id: str, query: str,
 
     # Knowledge — semantic fact search (ACL applied inside retrieve).
     r = retrieve(conn, company_id, query, groups=groups) if ql else {"facts": []}
+    # Search is noisier than Q&A: short queries score every fact in a compressed ~0.5 band, so
+    # an absolute floor can't separate signal from noise. Keep a fact if it lexically contains
+    # the query, or if it's a STRONG semantic hit (>=0.60) close to the best one (within 0.06).
+    top = max((f.get("similarity", 0) for f in r["facts"]), default=0.0)
     knowledge = [{"statement": f["statement"], "doc_id": f["doc_id"], "title": f["title"]}
-                 for f in r["facts"][:5]]
+                 for f in r["facts"]
+                 if hit(f["statement"]) or (f.get("similarity", 0) >= 0.60 and f.get("similarity", 0) >= top - 0.06)][:5]
     fact_docs = {f["doc_id"] for f in r["facts"]}
 
     # Documents — lexical match (title/body) or surfaced by the semantic hits; ACL filtered.

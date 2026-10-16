@@ -734,31 +734,31 @@ class DeliverableRequest(BaseModel):
 
 @app.post("/deliverables/generate")
 def generate_deliverable(req: DeliverableRequest, authorization: str | None = Header(None)) -> dict:
-    """Draft a finished, grounded, cited deliverable from company knowledge (+ a project). Member+."""
-    cid, groups, _ = _require(authorization, "member")
+    """Draft a finished, grounded, cited deliverable from company knowledge (+ a project)."""
+    cid, groups, _ = _identity(req.company_id, authorization)
     tok = auth.parse_token(authorization) or {}
     if not req.goal.strip():
         raise HTTPException(status_code=400, detail="describe what you need")
     return deliverables_mod.generate(_db(), cid, req.kind, req.goal, project_id=req.project_id,
-                                     created_by=tok.get("username", ""), groups=groups)
+                                     created_by=tok.get("username", "") or "guest", groups=groups)
 
 
 @app.get("/workspace/home")
 def workspace_home(company_id: str, authorization: str | None = Header(None)) -> dict:
-    """Assembled 'work gets done' dashboard: active work, company signals, recent work. Member+."""
-    cid, groups, _ = _require(authorization, "member")
+    """Assembled 'work gets done' dashboard: active work, company signals, recent work."""
+    cid, groups, _ = _identity(company_id, authorization)
     return workspace_mod.workspace_home(_db(), cid, groups=groups)
 
 
 @app.get("/deliverables")
 def list_deliverables(company_id: str, authorization: str | None = Header(None)) -> list[dict]:
-    cid, _, _ = _require(authorization, "member")
+    cid, _, _ = _identity(company_id, authorization)
     return deliverables_mod.list_deliverables(_db(), cid)
 
 
 @app.get("/deliverables/{deliverable_id}")
 def get_deliverable(deliverable_id: str, company_id: str, authorization: str | None = Header(None)) -> dict:
-    cid, _, _ = _require(authorization, "member")
+    cid, _, _ = _identity(company_id, authorization)
     res = deliverables_mod.get_deliverable(_db(), cid, deliverable_id)
     if res is None:
         raise HTTPException(status_code=404, detail="deliverable not found")
@@ -777,19 +777,19 @@ def my_briefing(company_id: str, authorization: str | None = Header(None)) -> di
 
 @app.get("/projects")
 def list_projects(company_id: str, authorization: str | None = Header(None)) -> list[dict]:
-    cid, _, _ = _require(authorization, "member")
+    cid, _, _ = _identity(company_id, authorization)
     return projects_mod.list_projects(_db(), cid)
 
 
 @app.post("/projects")
 def create_project(req: CreateProjectRequest, authorization: str | None = Header(None)) -> dict:
-    cid, _, _ = _require(authorization, "member")
+    cid, _, _ = _identity(req.company_id, authorization)
     return projects_mod.create_project(_db(), cid, req.name, req.description)
 
 
 @app.get("/projects/{project_id}")
 def get_project(project_id: str, company_id: str, authorization: str | None = Header(None)) -> dict:
-    cid, _, _ = _require(authorization, "member")
+    cid, _, _ = _identity(company_id, authorization)
     res = projects_mod.get_project(_db(), cid, project_id)
     if res is None:
         raise HTTPException(status_code=404, detail="project not found")
@@ -798,7 +798,7 @@ def get_project(project_id: str, company_id: str, authorization: str | None = He
 
 @app.post("/projects/{project_id}/entries")
 def add_project_entries(project_id: str, req: ProjectEntriesRequest, authorization: str | None = Header(None)) -> dict:
-    cid, _, _ = _require(authorization, "member")
+    cid, _, _ = _identity(req.company_id, authorization)
     added = projects_mod.add_entries(_db(), cid, project_id, req.entries)
     if added == 0 and req.entries:
         raise HTTPException(status_code=404, detail="project not found or no valid entries")
@@ -807,7 +807,7 @@ def add_project_entries(project_id: str, req: ProjectEntriesRequest, authorizati
 
 @app.post("/projects/{project_id}/ask")
 def ask_project(project_id: str, req: ProjectAskRequest, authorization: str | None = Header(None)) -> dict:
-    cid, groups, _ = _require(authorization, "member")
+    cid, groups, _ = _identity(req.company_id, authorization)
     res = projects_mod.ask_project(_db(), cid, project_id, req.question, groups=groups)
     if res is None:
         raise HTTPException(status_code=404, detail="project not found")

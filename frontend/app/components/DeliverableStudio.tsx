@@ -25,15 +25,18 @@ export default function DeliverableStudio({ companyId, onCreated, embedded = fal
   const [busy, setBusy] = useState(false);
   const [res, setRes] = useState<Deliverable | null>(null);
   const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { listProjects(companyId).then(setProjects).catch(() => {}); }, [companyId]);
 
   async function run() {
     if (!goal.trim()) return;
-    setBusy(true); setRes(null);
+    setBusy(true); setRes(null); setError(null);
     try {
       setRes(await generateDeliverable(companyId, kind, goal, projectId || null));
       onCreated?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't generate — please try again.");
     } finally {
       setBusy(false);
     }
@@ -72,6 +75,8 @@ export default function DeliverableStudio({ companyId, onCreated, embedded = fal
         </select>
         <button onClick={run} disabled={busy || !goal.trim()} className="btn-primary px-4 py-1.5 text-sm">{busy ? "Drafting…" : "Generate draft"}</button>
       </div>
+
+      {error && <div className="mt-2 rounded-lg px-3 py-2 text-sm" style={{ background: "color-mix(in srgb, var(--red) 12%, transparent)", color: "var(--red)" }}>{error}</div>}
 
       {res && (
         <div className="animate-scale-in mt-4 rounded-xl border border-border bg-surface-2 p-4">

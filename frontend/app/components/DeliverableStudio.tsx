@@ -17,7 +17,7 @@ const PRESETS: { kind: string; label: string; goal: string }[] = [
   { kind: "reply", label: "Customer reply", goal: "Reply to a customer asking how our expense reimbursement works" },
 ];
 
-export default function DeliverableStudio({ companyId, onCreated }: { companyId: string; onCreated?: () => void }) {
+export default function DeliverableStudio({ companyId, onCreated, embedded = false }: { companyId: string; onCreated?: () => void; embedded?: boolean }) {
   const [kind, setKind] = useState("faq");
   const [goal, setGoal] = useState("");
   const [projectId, setProjectId] = useState("");
@@ -44,9 +44,13 @@ export default function DeliverableStudio({ companyId, onCreated }: { companyId:
   }
 
   return (
-    <section className="animate-fade-up card p-5">
-      <h2 className="flex items-center gap-2 text-sm font-semibold"><span className="text-accent"><IconSparkle size={16} /></span> Create a deliverable</h2>
-      <p className="mt-1 text-xs text-muted">Describe what you need. Lore drafts it from your company knowledge — cited, and flagged for review before it goes out.</p>
+    <section className={embedded ? "" : "animate-fade-up card p-5"}>
+      {!embedded && (
+        <>
+          <h2 className="flex items-center gap-2 text-sm font-semibold"><span className="text-accent"><IconSparkle size={16} /></span> Create a deliverable</h2>
+          <p className="mt-1 text-xs text-muted">Describe what you need. Lore drafts it from your company knowledge — cited, and flagged for review before it goes out.</p>
+        </>
+      )}
 
       <div className="mt-2 flex flex-wrap gap-1.5">
         {PRESETS.map((p) => (

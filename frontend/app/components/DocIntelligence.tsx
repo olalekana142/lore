@@ -9,7 +9,7 @@ const MODES: [string, string][] = [
   ["summary", "Summarize"], ["obligations", "Obligations"], ["risks", "Unusual clauses"], ["actions", "Action items"],
 ];
 
-export default function DocIntelligence({ companyId }: { companyId: string }) {
+export default function DocIntelligence({ companyId, embedded = false }: { companyId: string; embedded?: boolean }) {
   const [tab, setTab] = useState<"analyze" | "compare">("analyze");
 
   // analyze
@@ -46,9 +46,9 @@ export default function DocIntelligence({ companyId }: { companyId: string }) {
   }
 
   return (
-    <section className="animate-fade-up card mt-4 p-5">
+    <section className={embedded ? "" : "animate-fade-up card mt-4 p-5"}>
       <div className="flex items-center justify-between">
-        <h2 className="flex items-center gap-2 text-sm font-semibold"><span className="text-accent"><IconDoc size={16} /></span> Document intelligence</h2>
+        {embedded ? <span /> : <h2 className="flex items-center gap-2 text-sm font-semibold"><span className="text-accent"><IconDoc size={16} /></span> Document intelligence</h2>}
         <div className="flex gap-1 rounded-lg bg-surface-2 p-0.5 text-xs">
           {(["analyze", "compare"] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)} className={`rounded-md px-2.5 py-1 font-medium capitalize transition-colors ${tab === t ? "bg-surface text-foreground shadow-sm" : "text-muted-dim"}`}>
@@ -57,7 +57,7 @@ export default function DocIntelligence({ companyId }: { companyId: string }) {
           ))}
         </div>
       </div>
-      <p className="mt-1 text-xs text-muted">Paste a contract, offer letter or any document — Lore works with what you give it (no upload stored).</p>
+      {!embedded && <p className="mt-1 text-xs text-muted">Paste a contract, offer letter or any document — Lore works with what you give it (no upload stored).</p>}
 
       {tab === "analyze" ? (
         <>

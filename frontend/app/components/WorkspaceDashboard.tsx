@@ -22,11 +22,7 @@ const GOALS = [
   { icon: IconBook, title: "Build a project plan", body: "Draft a plan using your policies and team context.", target: "create" },
 ];
 
-function scrollTo(id: string) {
-  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-export default function WorkspaceDashboard({ companyId, refreshKey }: { companyId: string; refreshKey: number }) {
+export default function WorkspaceDashboard({ companyId, refreshKey, onLaunch }: { companyId: string; refreshKey: number; onLaunch: (target: string) => void }) {
   const [data, setData] = useState<WorkspaceHome | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [detail, setDetail] = useState<DeliverableDetail | null>(null);
@@ -107,7 +103,7 @@ export default function WorkspaceDashboard({ companyId, refreshKey }: { companyI
         <div className="mb-2 flex items-center gap-2"><span className="text-accent"><IconArrow size={16} /></span><h2 className="text-sm font-bold">Start with a goal</h2></div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {GOALS.map((g) => (
-            <button key={g.title} onClick={() => scrollTo(g.target)} className="marketing-card group p-4 text-left">
+            <button key={g.title} onClick={() => onLaunch(g.target)} className="marketing-card group p-4 text-left">
               <div className="flex items-center justify-between">
                 <span className="grid h-9 w-9 place-items-center rounded-lg bg-accent-weak text-accent"><g.icon size={18} /></span>
                 <IconArrow size={15} />

@@ -441,7 +441,7 @@ export async function searchAll(companyId: string, query: string): Promise<Unive
   return j(await fetch(`${BASE}/search/all?${qs({ company_id: companyId, query })}`, { headers: authHeader() }));
 }
 
-export interface ProjectSummary { id: string; name: string; description: string; created_at: string | null; entries: number }
+export interface ProjectSummary { id: string; name: string; description: string; created_at: string | null; entries: number; people: number; docs: number }
 export interface ProjectEntry { id: string; kind: string; title: string; body: string; owner: string; due: string; created_at: string | null }
 export interface Project {
   id: string; name: string; description: string; created_at: string | null;

@@ -12,9 +12,12 @@ const KIND_META: Record<string, { label: string; color: string }> = {
   decision: { label: "Decisions", color: "var(--green)" },
   action: { label: "Action items", color: "var(--accent)" },
   question: { label: "Open questions", color: "var(--amber)" },
+  person: { label: "People", color: "#3b82f6" },
+  doc: { label: "Linked documents", color: "#8b5cf6" },
   note: { label: "Notes", color: "var(--muted)" },
 };
-const ORDER = ["decision", "action", "question", "note"];
+const ORDER = ["decision", "action", "question", "person", "doc", "note"];
+const SINGULAR: Record<string, string> = { decision: "Decision", action: "Action item", question: "Open question", person: "Person", doc: "Linked document", note: "Note" };
 
 export default function ProjectPage() {
   const params = useParams();
@@ -100,10 +103,10 @@ export default function ProjectPage() {
             <h2 className="text-sm font-semibold">Add to project memory</h2>
             <div className="mt-2 flex flex-col gap-2 sm:flex-row">
               <select value={kind} onChange={(e) => setKind(e.target.value)} className="input px-3 py-2 text-sm sm:w-40">
-                {ORDER.map((k) => <option key={k} value={k}>{KIND_META[k].label.replace(/s$/, "")}</option>)}
+                {ORDER.map((k) => <option key={k} value={k}>{SINGULAR[k]}</option>)}
               </select>
               <input value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()}
-                placeholder="What happened / was decided…" className="input flex-1 px-3 py-2 text-sm" />
+                placeholder={kind === "person" ? "Name · role (e.g. Sam — DB lead)" : kind === "doc" ? "Document title this project relies on" : "What happened / was decided…"} className="input flex-1 px-3 py-2 text-sm" />
               <button onClick={add} disabled={adding || !title.trim()} className="btn-ghost px-4 py-2 text-sm">{adding ? "Adding…" : "Add"}</button>
             </div>
           </section>

@@ -126,12 +126,17 @@ def workspace_home(conn: kuzu.Connection, company_id: str, groups: list[str] | N
         recent.append({
             "id": p["id"], "title": f"Project memory — {p['name']}", "type": "Project memory", "type_key": "project",
             "context": f"{p['entries']} item{'s' if p['entries'] != 1 else ''}"
+                       + (f" · {p.get('people', 0)} people" if p.get("people") else "")
+                       + (f" · {p.get('docs', 0)} docs" if p.get("docs") else "")
                        + (f" · {open_q.get(p['id'], 0)} open" if open_q.get(p["id"], 0) else ""),
             "status": "active", "status_label": "Active", "grounded": False, "source_count": 0,
             "updated": p["created_at"], "href": f"/projects/{p['id']}",
         })
+    # keep recent work MIXED too: newest 4 generated + newest 3 projects, then by recency
     recent.sort(key=lambda x: x["updated"] or "", reverse=True)
-    recent = recent[:6]
+    gen = [r for r in recent if r["type_key"] == "generated"][:4]
+    proj = [r for r in recent if r["type_key"] == "project"][:3]
+    recent = sorted(gen + proj, key=lambda x: x["updated"] or "", reverse=True)
 
     return {"active_work": active, "company_signals": signals[:3], "recent_work": recent}
 

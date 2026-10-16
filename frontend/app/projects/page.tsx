@@ -68,6 +68,8 @@ export default function ProjectsPage() {
             </div>
             <div className="flex shrink-0 items-center gap-3 text-xs text-muted-dim">
               <span className="inline-flex items-center gap-1"><IconGap size={13} /> {p.entries} item{p.entries === 1 ? "" : "s"}</span>
+              {p.people > 0 && <span>{p.people} {p.people === 1 ? "person" : "people"}</span>}
+              {p.docs > 0 && <span>{p.docs} doc{p.docs === 1 ? "" : "s"}</span>}
               <IconArrow size={15} />
             </div>
           </Link>

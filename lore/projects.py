@@ -22,7 +22,7 @@ import kuzu
 from lore.config import settings
 from lore.llm import complete
 
-KINDS = {"decision", "action", "question", "note"}
+KINDS = {"decision", "action", "question", "note", "person", "doc"}
 
 
 def create_project(conn: kuzu.Connection, company_id: str, name: str, description: str = "") -> dict:
@@ -50,7 +50,15 @@ def list_projects(conn: kuzu.Connection, company_id: str) -> list[dict]:
     while res.has_next():
         pid, name, desc, created, n = res.get_next()
         out.append({"id": pid, "name": name, "description": desc or "",
-                    "created_at": created.isoformat() if created else None, "entries": int(n or 0)})
+                    "created_at": created.isoformat() if created else None, "entries": int(n or 0),
+                    "people": 0, "docs": 0})
+    if out:
+        by_id = {p["id"]: p for p in out}
+        eres = conn.execute("MATCH (p:Project)-[:HAS_ENTRY]->(e:ProjectEntry) RETURN e.project_id, e.kind", {})
+        while eres.has_next():
+            pid, kind = eres.get_next()
+            if pid in by_id and kind in ("person", "doc"):
+                by_id[pid]["people" if kind == "person" else "docs"] += 1
     return out
 
 
@@ -117,8 +125,9 @@ def add_entries(conn: kuzu.Connection, company_id: str, project_id: str, entries
 
 
 _ASK_PROMPT = """Answer the question using the PROJECT MEMORY and COMPANY POLICY below.
-Prefer the project's own decisions/notes for "why/what did we decide" questions. Cite the
-basis inline as (decision), (note), (question) or (policy: <doc title>). If neither contains
+Prefer the project's own decisions/notes for "why/what did we decide" questions; use (person)
+entries for "who" questions and (doc) entries for which documents the project relies on. Cite the
+basis inline as (decision), (note), (question), (person), (doc) or (policy: <doc title>). If neither contains
 the answer, say it isn't recorded in this project yet. Be concise.
 
 PROJECT MEMORY:

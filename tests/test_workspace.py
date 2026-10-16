@@ -56,7 +56,7 @@ def test_projects_persist_and_count(conn):
     ])
     assert added == 4
     detail = projects.get_project(conn, "acme", p["id"])
-    assert detail["counts"] == {"decision": 1, "action": 1, "question": 1, "note": 1}
+    assert detail["counts"] == {"decision": 1, "action": 1, "question": 1, "note": 1, "person": 0, "doc": 0}
     assert projects.add_entries(conn, "acme", "proj:missing", [{"kind": "note", "title": "x"}]) == 0
     assert projects.get_project(conn, "acme", "proj:missing") is None
 

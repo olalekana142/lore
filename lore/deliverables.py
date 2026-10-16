@@ -31,8 +31,10 @@ KINDS: dict[str, str] = {
 
 def generate(conn: kuzu.Connection, company_id: str, kind: str, goal: str,
              project_id: str | None = None, created_by: str = "",
-             groups: list[str] | None = None) -> dict:
-    """Draft a deliverable grounded in company knowledge (+ a project's memory if given)."""
+             groups: list[str] | None = None, persist: bool = True) -> dict:
+    """Draft a deliverable grounded in company knowledge (+ a project's memory if given).
+
+    persist=False (used by the eval harness) drafts without saving a Deliverable node."""
     from lore.retrieval.answer import cited_sources, retrieve
 
     descr = KINDS.get(kind, KINDS["brief"])
@@ -65,21 +67,25 @@ def generate(conn: kuzu.Connection, company_id: str, kind: str, goal: str,
     did = f"deliv:{uuid.uuid4().hex[:10]}"
     title = goal.strip()[:80] or KINDS.get(kind, "Deliverable")
     titles = [s["title"] for s in cited]
-    conn.execute(
-        """MERGE (d:Deliverable {id:$id})
-           SET d.company_id=$cid, d.kind=$kind, d.title=$title, d.goal=$goal, d.content=$content,
-               d.source_titles=$titles, d.source_count=$sc, d.project_id=$pid, d.created_by=$by,
-               d.status=$status, d.created_at=$ts""",
-        {"id": did, "cid": company_id, "kind": kind, "title": title, "goal": goal.strip(),
-         "content": content, "titles": titles, "sc": len(titles), "pid": project_id or "",
-         "by": created_by, "status": "draft", "ts": datetime.now()},
-    )
-    conn.execute(
-        "MATCH (c:Company {id:$cid}), (d:Deliverable {id:$id}) MERGE (c)-[:HAS_DELIVERABLE]->(d)",
-        {"cid": company_id, "id": did},
-    )
+    if persist:
+        conn.execute(
+            """MERGE (d:Deliverable {id:$id})
+               SET d.company_id=$cid, d.kind=$kind, d.title=$title, d.goal=$goal, d.content=$content,
+                   d.source_titles=$titles, d.source_count=$sc, d.project_id=$pid, d.created_by=$by,
+                   d.status=$status, d.created_at=$ts""",
+            {"id": did, "cid": company_id, "kind": kind, "title": title, "goal": goal.strip(),
+             "content": content, "titles": titles, "sc": len(titles), "pid": project_id or "",
+             "by": created_by, "status": "draft", "ts": datetime.now()},
+        )
+        conn.execute(
+            "MATCH (c:Company {id:$cid}), (d:Deliverable {id:$id}) MERGE (c)-[:HAS_DELIVERABLE]->(d)",
+            {"cid": company_id, "id": did},
+        )
     return {"id": did, "kind": kind, "title": title, "content": content, "sources": cited,
-            "grounded": bool(cited), "needs_review": True, "project_id": project_id or None}
+            "grounded": bool(cited), "needs_review": True, "project_id": project_id or None,
+            # how many numbered sources the model was allowed to cite (eval: detects dangling [n])
+            "retrieved_sources": len(r["sources"]),
+            "retrieved_facts": [f["statement"] for f in facts]}
 
 
 def list_deliverables(conn: kuzu.Connection, company_id: str, limit: int = 12) -> list[dict]:

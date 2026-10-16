@@ -17,6 +17,7 @@ Run:
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 import time
 
@@ -181,12 +182,118 @@ def answer_eval(conn, verify: bool = False) -> dict:
     }
 
 
+# ------------------------------------------------------- work-feature eval (the AI workspace)
+# The workspace features (deliverables, meeting + document policy checks) are LLM-generated
+# work products. They are gated here with the same discipline as /ask: grounding, no dangling
+# citations, and correct policy-conflict detection against fixed golden inputs.
+
+WORK_DELIVERABLES = [
+    {"kind": "faq", "goal": "Customer-facing FAQ about our PTO, expense and travel policies",
+     "expect_any_source": ["Paid Time Off Policy", "Expense Reimbursement", "Booking Business Travel"]},
+    {"kind": "sop", "goal": "SOP for reporting and responding to a security incident",
+     "expect_any_source": ["Reporting a Security Incident"]},
+]
+
+# A vendor redline with known violations of the seeded Vendor & Procurement Policy.
+WORK_REDLINE = (
+    "Payment is due Net 15, non-refundable. Fees may increase by up to 20% at each renewal. "
+    "Auto-renews unless Acme gives 120 days notice. DataPipe may use aggregated Acme data to train "
+    "and improve its models. DataPipe will use reasonable efforts to notify Acme of a confirmed data "
+    "breach. DataPipe liability is capped at one month of fees; Acme liability is uncapped. "
+    "DataPipe may subcontract any obligations to third parties without notice to Acme."
+)
+WORK_REDLINE_CUES = ["net 15", "120", "train", "72", "uncapped", "subcontract"]
+WORK_REDLINE_MIN_CONFLICTS = 4
+
+# A meeting with two decisions that break policy (travel self-approval, unlimited meals) and one
+# that matches current policy (new hires take PTO immediately) which must NOT be flagged.
+WORK_TRANSCRIPT = (
+    "Dan: We decided to let the sales team approve their own travel up to 2000 dollars without any "
+    "manager sign-off. Priya: Also new hires can take PTO immediately with no waiting period. "
+    "Dan: And we will let employees expense unlimited meals when traveling."
+)
+WORK_MEETING_FLAG_CUES = ["travel", "meal"]
+WORK_MEETING_NOFLAG_CUE = "immediately"
+
+_NUM_RE = re.compile(r"\$?\d{2,}(?:[.,]\d+)?%?")
+
+
+def _numbers_grounded(content: str, facts: list[str]) -> tuple[int, int]:
+    """Numbers (>= 2 digits, or $/%) in the draft that also appear in a retrieved fact."""
+    pool = " ".join(facts)
+    nums = {m.group(0).strip("$%") for m in _NUM_RE.finditer(content)}
+    nums = {n for n in nums if n and not n.startswith("0")}
+    if not nums:
+        return 0, 0
+    hit = sum(1 for n in nums if n in pool)
+    return hit, len(nums)
+
+
+def work_eval(conn) -> dict:
+    from lore import deliverables, docintel, meetings
+
+    fails: list[str] = []
+
+    # --- deliverables: grounded · no dangling [n] · expected source cited · numbers grounded ---
+    d_total = d_grounded = d_source_hit = 0
+    dangling = 0
+    num_hit = num_total = 0
+    for g in WORK_DELIVERABLES:
+        d_total += 1
+        res = deliverables.generate(conn, COMPANY, g["kind"], g["goal"], groups=PUBLIC, persist=False)
+        cited_ns = {int(n) for n in re.findall(r"\[(\d+)\]", res["content"])}
+        if res["grounded"]:
+            d_grounded += 1
+        else:
+            fails.append(f"deliverable not grounded: {g['goal']}")
+        if any(n > res["retrieved_sources"] for n in cited_ns):
+            dangling += 1
+            fails.append(f"dangling citation (cites [n] beyond retrieved sources): {g['goal']}")
+        titles = {s["title"] for s in res["sources"]}
+        if titles & set(g["expect_any_source"]):
+            d_source_hit += 1
+        else:
+            fails.append(f"expected source not cited ({g['expect_any_source']}): {g['goal']}")
+        h, t = _numbers_grounded(res["content"], res["retrieved_facts"])
+        num_hit += h
+        num_total += t
+
+    # --- document policy check: the redline must surface its known violations ---
+    pc = docintel.check_policies(conn, COMPANY, WORK_REDLINE, groups=PUBLIC)
+    blob = " ".join(f"{c.get('term', '')} {c.get('issue', '')}" for c in pc["conflicts"]).lower()
+    cue_hits = sum(1 for cue in WORK_REDLINE_CUES if cue in blob)
+    redline_ok = len(pc["conflicts"]) >= WORK_REDLINE_MIN_CONFLICTS and cue_hits / len(WORK_REDLINE_CUES) >= 0.66
+    if not redline_ok:
+        fails.append(f"redline policy check: {len(pc['conflicts'])} conflicts, {cue_hits}/{len(WORK_REDLINE_CUES)} cues")
+
+    # --- meeting policy check: flag the real violations, don't flag the policy-consistent one ---
+    ma = meetings.analyze_meeting(conn, COMPANY, WORK_TRANSCRIPT, groups=PUBLIC)
+    flagged = " ".join(c.get("decision", "") for c in ma["policy_conflicts"]).lower()
+    meet_flags_ok = all(cue in flagged for cue in WORK_MEETING_FLAG_CUES)
+    meet_noflag_ok = WORK_MEETING_NOFLAG_CUE not in flagged
+    if not meet_flags_ok:
+        fails.append(f"meeting check missed a real violation (flagged: {flagged[:80]!r})")
+    if not meet_noflag_ok:
+        fails.append("meeting check FALSE-FLAGGED the policy-consistent PTO decision")
+
+    passed = (d_grounded == d_total and dangling == 0 and d_source_hit == d_total
+              and redline_ok and meet_flags_ok and meet_noflag_ok)
+    return {
+        "pass": passed, "fails": fails,
+        "deliverables": d_total, "grounded": d_grounded, "source_hit": d_source_hit, "dangling": dangling,
+        "numbers_grounded": (num_hit, num_total),
+        "redline_conflicts": len(pc["conflicts"]), "redline_cues": f"{cue_hits}/{len(WORK_REDLINE_CUES)}",
+        "meeting_flags_ok": meet_flags_ok, "meeting_noflag_ok": meet_noflag_ok,
+    }
+
+
 # ----------------------------------------------------------------------- runner
 def main() -> None:
     ap = argparse.ArgumentParser(description="Lore RAG eval")
     ap.add_argument("--answers", action="store_true", help="run answer-level (LLM) metrics")
     ap.add_argument("--verify-ab", action="store_true", help="A/B the claim verifier (expensive; ~2x LLM calls)")
     ap.add_argument("--gate", action="store_true", help="enforce regression thresholds (CI); implies --answers")
+    ap.add_argument("--work", action="store_true", help="eval the AI work features (deliverables · policy checks); included in --gate")
     args = ap.parse_args()
     conn = init_schema(get_connection())
 
@@ -218,6 +325,7 @@ def main() -> None:
               " and acceptable latency.")
         return
 
+    a = None
     if args.answers or args.gate:
         print("\n=== Answer-level (verifier off — shipping config) ===")
         a = answer_eval(conn, verify=False)
@@ -232,14 +340,30 @@ def main() -> None:
             for q, cat in a["fails"]:
                 print(f"    - [{cat}]  {q}")
 
-        if args.gate:
-            ok = (sec["pass"] and a["false_answers"] == 0 and a["false_abstentions"] == 0
-                  and a["citation_precision"] >= 0.9 and hyb["recall"] >= 0.9
-                  and a["abstain_acc"] >= 0.9)
-            print(f"\n=== Regression gate: {'PASS' if ok else 'FAIL'} ===")
-            print("  HARD: ACL leak MUST=0. MUST NOT regress: citation precision, abstention,")
-            print("        0 hallucinations, 0 false-abstentions. recall>=0.90.")
-            sys.exit(0 if ok else 1)
+    w = None
+    if args.work or args.gate:
+        print("\n=== Work features (deliverables · policy checks) ===")
+        w = work_eval(conn)
+        nh, nt = w["numbers_grounded"]
+        print(f"  deliverables grounded     : {w['grounded']}/{w['deliverables']}  ·  expected source cited: {w['source_hit']}/{w['deliverables']}  ·  dangling citations: {w['dangling']}")
+        print(f"  numbers traceable to facts: {nh}/{nt}" + ("" if nt else "  (none to check)"))
+        print(f"  redline policy check      : {w['redline_conflicts']} conflicts, cues {w['redline_cues']}")
+        print(f"  meeting policy check      : real violations flagged={w['meeting_flags_ok']}  ·  no false flag={w['meeting_noflag_ok']}")
+        for f in w["fails"]:
+            print(f"    - {f}")
+        if not args.gate:
+            print(f"\n  work features: {'PASS' if w['pass'] else 'FAIL'}")
+
+    if args.gate and a is not None:
+        ok = (sec["pass"] and a["false_answers"] == 0 and a["false_abstentions"] == 0
+              and a["citation_precision"] >= 0.9 and hyb["recall"] >= 0.9
+              and a["abstain_acc"] >= 0.9 and (w is None or w["pass"]))
+        print(f"\n=== Regression gate: {'PASS' if ok else 'FAIL'} ===")
+        print("  HARD: ACL leak MUST=0. MUST NOT regress: citation precision, abstention,")
+        print("        0 hallucinations, 0 false-abstentions. recall>=0.90.")
+        print("  WORK: deliverables grounded + expected source cited + no dangling [n];")
+        print("        redline check finds its violations; meeting check flags real ones, no false flag.")
+        sys.exit(0 if ok else 1)
 
 
 if __name__ == "__main__":

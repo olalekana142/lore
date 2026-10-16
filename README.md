@@ -173,6 +173,14 @@ Company  --ASKED-->       EmployeeQuestion  Topic    --CONNECTED_TO-> Topic
 | `search_knowledge` | `(company_id, query, top_k)` | semantic search over facts |
 | `stale_documents` | `(company_id, stale_after_days)` | docs overdue for review |
 | `find_conflicts` | `(company_id)` | **graph-native**: facts that conflict or duplicate across docs |
+| `search_all` | `(company_id, query)` | universal search — knowledge · documents · projects · decisions · people-to-ask · glossary |
+| `generate_deliverable` | `(company_id, kind, goal, project_id?)` | grounded, cited draft: brief · faq · sop · report · memo · reply · agenda |
+| `analyze_meeting` | `(company_id, transcript)` | decisions · action items · open questions · recap email · **policy check** |
+| `check_document_policy` | `(company_id, text)` | flag a pasted document's terms that conflict with company policy |
+| `list_projects` · `ask_project` | `(company_id[, project_id, question])` | project memory — list, and answer from a project's decisions/notes |
+| `attention_digest` | `(company_id)` | Autopilot — ranked findings that need attention |
+
+> MCP callers carry no user identity, so they see **public** documents only (same ACL as an anonymous web user).
 
 ### Intelligence features (the graph moat)
 
@@ -188,8 +196,9 @@ Company  --ASKED-->       EmployeeQuestion  Topic    --CONNECTED_TO-> Topic
 - **Provenance** — click a cited fact to open the source document with the exact sentence highlighted.
 - **Auth + permission-aware answers** — users belong to groups; every `Document` has an `audience`. Answers, search, and the library are filtered so people only ever see (and get cited) what their groups permit; anonymous callers see public docs only. Passwords are salted PBKDF2; sessions are stateless HMAC tokens. *Demo users (seeded): `hr_admin`/`hr` (sees restricted HR docs), `alice`/`alice` (engineering), `sam`/`sam` (public only) — sign in and ask "What do Level 5 engineers earn?" to see access scoping in action.*
 
-The HTTP API mirrors these: `POST /ingest`, `POST /ask`, `GET /search`, `GET /stale`,
-`GET /topics`.
+The HTTP API (`lore/api.py`) mirrors these and more — `/ask` · `/search/all` ·
+`/deliverables/*` · `/meetings/analyze` · `/docint/*` · `/projects/*` · `/knowledge/check` ·
+`/documents/simulate` · `/autopilot` · `/alerts` · `/me/briefing` · `/workspace/home` (docs at `/docs`).
 
 ---
 
@@ -289,8 +298,9 @@ npm install         # first time only
 npm run dev         # http://localhost:3000
 ```
 
-**Pages:** `/ask` (flagship — ask a question, get a cited answer) · `/connect` (add
-documents) · `/stale` (review docs overdue for update).
+**Pages:** `/` (start-my-day briefing) · `/workspace` (outcome dashboard — deliverables,
+meeting & document intelligence, recent work) · `/ask` · `/search` · `/projects` · `/library`
+(documents) · `/onboarding` · editors: `/gaps` · `/health` · `/autopilot` · `/connect` · admin: `/admin`.
 
 ### See the freshness loop
 
@@ -313,7 +323,9 @@ python -m lore.ingestion.pipeline --company acme --source sample_data/acme_pto_u
 - [x] **Phase 6 — Trust & workflow**: conflict-at-upload ✅ · ownership/verification ✅ · escalate→learn ✅ · onboarding playbooks ✅ · actionable workflows ✅ · provenance highlighting ✅
 - [x] **Phase 7 — Ops**: auth + group permissions ✅ · RBAC (admin/editor/member) ✅ · role-based dashboards ✅ · per-thread DB connections ✅
 - [x] **Phase 8 — Knowledge Change Management (Lore 2.0)**: RAG eval harness + regression gate ✅ · version history + diff ✅ · knowledge impact analysis ✅ · Knowledge Check (impact + conflict + governed eval → verdict) ✅ · historical answer invalidation + re-answer ✅ · canonical source / authority ✅ · challenge-this-answer ✅ · gap → draft → publish → verify ✅ · proactive alerts ✅ · policy ambiguity detection ✅
-- [ ] **Later**: SSO · Slack bot · expert/people graph · real Jira/Slack action connectors · scheduled re-sync · database connector
+- [x] **Phase 9 — Employee workspace (layer 1)**: start-my-day briefing ✅ · universal search incl. people-to-ask ✅ · meeting intelligence + policy check ✅ · one-click work products ✅ · project memory ✅ · document intelligence + policy check ✅ · Autopilot ✅ · Deliverables (grounded, cited finished work; Word/.md export) ✅ · outcome-dashboard Workspace with pop-up tools ✅
+- [ ] **Next**: eval gate for the AI work features · stateful work items (assign / approve / complete) · richer projects (people, linked docs) · one integration (Jira / Linear / Slack)
+- [ ] **Later**: SSO · Slack bot · expert/people graph · scheduled re-sync · database connector
 
 ---
 
@@ -321,31 +333,45 @@ python -m lore.ingestion.pipeline --company acme --source sample_data/acme_pto_u
 
 ```
 lore/
-├── mcp_server.py           # FastMCP entrypoint — registers all tools
+├── mcp_server.py           # FastMCP entrypoint — registers all tools (incl. workspace)
 ├── api.py                  # FastAPI HTTP layer for the web app
-├── config.py               # models, paths, retrieval knobs
-├── models.py               # Company / Document / Fact / Topic
-├── llm.py                  # single Groq call site
+├── config.py · models.py · llm.py (single Groq call site) · auth.py (PBKDF2, HMAC tokens, ACL)
+├── eval.py                 # RAG eval harness + regression gate (evidence before complexity)
+├── seed.py                 # first-boot sample company (Docker demo)
 ├── graph/
-│   ├── schema.py           # Kùzu node/edge DDL
+│   ├── schema.py           # Kùzu node/edge DDL (Document, Fact, Topic, Project, Deliverable, Answer…)
 │   └── queries.py          # stale docs, topic coverage
-├── ingestion/
-│   ├── pipeline.py         # fetch → chunk → extract → embed → link
-│   ├── chunk.py            # paragraph-aware chunker
-│   ├── extract.py          # Groq fact/topic extraction (JSON mode)
-│   ├── embed.py            # fastembed embeddings + dedupe
-│   └── adapters/
-│       └── documents.py    # csv/json/txt/md upload adapter
-└── retrieval/
-    ├── answer.py           # retrieve-then-synthesize, with citations
-    ├── deep_search.py      # semantic fact search
-    └── nl_query.py         # NL entry point
+├── ingestion/              # pipeline.py (chunk → extract → embed → link → version snapshot),
+│                           # chunk.py, extract.py, embed.py, adapters/ (files, Google Drive)
+├── retrieval/              # answer.py (ACL · temporal · authority/canonical re-rank · cite),
+│                           # deep_search.py, hybrid.py · temporal.py · verify.py (built, measured, OFF)
+│
+│   # knowledge layer (trust)
+├── health.py               # conflict/duplicate detection + resolution recommendation
+├── knowledge.py            # impact · history/diff · Knowledge Check · ambiguity · gap→publish
+├── provenance.py           # answers pinned to a knowledge state; stale-answer invalidation
+├── challenge.py            # adversarial "challenge this answer"
+├── simulate.py             # policy simulation (dry-run a change) + apply
+│   # ops layer
+├── analytics.py · alerts.py · autopilot.py · glossary.py · escalations.py · feedback.py · actions.py
+│   # employee workspace layer
+├── workspace.py            # outcome dashboard (active work · signals · recent work)
+├── deliverables.py         # grounded, cited finished work products
+├── meetings.py             # meeting intelligence + policy check
+├── docintel.py             # document analyze / compare / policy check
+├── projects.py             # project memory + ask-this-project
+├── briefing.py · search.py · compose.py · onboarding.py
 ```
 ```
-frontend/  — Next.js app (app/ask, app/connect, app/stale)
-sample_data/acme_handbook.csv     — 10 sample policy docs
-sample_data/acme_pto_update.csv   — an updated PTO policy (demo the freshness loop)
+frontend/  — Next.js 16 app: app/workspace (dashboard + pop-up tools), app/ask, app/search,
+             app/projects, app/library, app/gaps, app/health, app/autopilot, app/connect,
+             app/admin, app/onboarding, app/welcome, app/login; shared components/ (AnswerText,
+             WorkspaceDashboard, DeliverableStudio, MeetingIntelligence, DocIntelligence, Modal…)
+sample_data/ — acme_handbook.csv (10 policy docs) · acme_pto_update.csv (PTO 20→25) ·
+               acme_faq.csv (legacy, conflicts on purpose) · parental leave PDF · BYOD DOCX
 ```
 ```
-tests/test_smoke.py — pure-logic tests (adapter, chunker, embedding), no network
+tests/test_smoke.py      — pure-logic tests (adapter, chunker, embedding, auth, temporal, provenance)
+tests/test_workspace.py  — DB-level tests on a temp graph (projects, deliverables, workspace home,
+                           briefing, search) — no Groq
 ```

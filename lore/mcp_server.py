@@ -72,6 +72,69 @@ def find_conflicts(company_id: str) -> dict:
     return health.content_health(_conn, company_id)
 
 
+# ---------------------------------------------------------------- Workspace tools
+# NOTE: MCP callers carry no user identity, so these see PUBLIC documents only (same ACL
+# as an anonymous web user) and generated work is attributed to "mcp".
+@mcp.tool()
+def search_all(company_id: str, query: str) -> dict:
+    """Universal search: knowledge, documents, projects, decisions, people-to-ask, glossary."""
+    from lore import search
+
+    return search.universal_search(_conn, company_id, query)
+
+
+@mcp.tool()
+def generate_deliverable(company_id: str, kind: str, goal: str, project_id: str | None = None) -> dict:
+    """Draft a grounded, cited work product. kind: brief | faq | sop | report | memo | reply | agenda.
+    Optionally scope to a project's memory. Returned as a draft flagged for human review."""
+    from lore import deliverables
+
+    return deliverables.generate(_conn, company_id, kind, goal, project_id=project_id, created_by="mcp")
+
+
+@mcp.tool()
+def analyze_meeting(company_id: str, transcript: str) -> dict:
+    """Turn a meeting transcript into decisions, action items (owner/due), open questions, a
+    follow-up email — and flag decisions that conflict with company policy."""
+    from lore import meetings
+
+    return meetings.analyze_meeting(_conn, company_id, transcript)
+
+
+@mcp.tool()
+def check_document_policy(company_id: str, text: str) -> dict:
+    """Check a pasted document's terms (a contract, redline, offer…) against company policy;
+    returns the conflicting terms with the internal policy each violates."""
+    from lore import docintel
+
+    return docintel.check_policies(_conn, company_id, text)
+
+
+@mcp.tool()
+def list_projects(company_id: str) -> list[dict]:
+    """List the company's projects (persistent memory of decisions, actions, questions)."""
+    from lore import projects
+
+    return projects.list_projects(_conn, company_id)
+
+
+@mcp.tool()
+def ask_project(company_id: str, project_id: str, question: str) -> dict:
+    """Answer from a project's memory (e.g. 'why did we choose PostgreSQL?'), grounded in the KB."""
+    from lore import projects
+
+    return projects.ask_project(_conn, company_id, project_id, question) or {"error": "project not found"}
+
+
+@mcp.tool()
+def attention_digest(company_id: str) -> dict:
+    """Autopilot: a ranked 'N things worth your attention' digest — conflicts, supersede
+    suggestions, recurring unanswered questions, overdue reviews, unowned/unused docs."""
+    from lore import autopilot
+
+    return autopilot.autopilot(_conn, company_id)
+
+
 def main() -> None:
     mcp.run()
 

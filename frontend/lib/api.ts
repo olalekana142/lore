@@ -684,16 +684,6 @@ export async function publishFromGap(companyId: string, question: string, title:
   }));
 }
 
-export async function ingestText(companyId: string, title: string, text: string): Promise<IngestSummary> {
-  return j(
-    await fetch(`${BASE}/ingest-text`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ company_id: companyId, title, text }),
-    }),
-  );
-}
-
 export async function verifyDocument(companyId: string, docId: string, owner: string): Promise<void> {
   await fetch(`${BASE}/documents/verify`, {
     method: "POST",

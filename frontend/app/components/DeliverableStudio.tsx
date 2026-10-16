@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { generateDeliverable, listProjects, type Deliverable, type ProjectSummary } from "@/lib/api";
 import AnswerText from "./AnswerText";
+import { downloadMarkdown, downloadWord } from "@/lib/download";
 import { IconSparkle, IconCopy, IconCheck } from "./icons";
 
 const KINDS: [string, string][] = [
@@ -45,19 +46,8 @@ export default function DeliverableStudio({ companyId, onCreated, embedded = fal
     if (!res) return;
     navigator.clipboard?.writeText(res.content).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {});
   }
-  function save(blob: Blob, ext: string) {
-    const name = (res?.title || "deliverable").replace(/[^a-z0-9]+/gi, "-").slice(0, 60).replace(/^-|-$/g, "") || "deliverable";
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `${name}.${ext}`; document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-  function downloadMd() { if (res) save(new Blob([res.content], { type: "text/markdown" }), "md"); }
-  function downloadDoc() {
-    if (!res) return;
-    const html = `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:'Segoe UI',Arial,sans-serif;line-height:1.5;color:#222}table{border-collapse:collapse}td,th{border:1px solid #bbb;padding:6px 9px;text-align:left}h1,h2,h3{margin:.6em 0 .3em}</style></head><body>${mdToHtml(res.content)}</body></html>`;
-    save(new Blob([html], { type: "application/msword" }), "doc");
-  }
+  function downloadMd() { if (res) downloadMarkdown(res.title, res.content); }
+  function downloadDoc() { if (res) downloadWord(res.title, res.content); }
 
   return (
     <section className={embedded ? "" : "animate-fade-up card p-5"}>
@@ -116,37 +106,4 @@ export default function DeliverableStudio({ companyId, onCreated, embedded = fal
       )}
     </section>
   );
-}
-
-// Minimal Markdown -> HTML for the Word export (headings, bold, lists, tables, citations).
-function mdToHtml(md: string): string {
-  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const inline = (s: string) => esc(s).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/\[(\d+)\]/g, "<sup>[$1]</sup>");
-  const lines = md.replace(/<br\s*\/?>/gi, "\n").split("\n");
-  let html = "", list: string | null = null, table = false;
-  const closeList = () => { if (list) { html += `</${list}>`; list = null; } };
-  const closeTable = () => { if (table) { html += "</table>"; table = false; } };
-  for (const raw of lines) {
-    const t = raw.trim();
-    const h = t.match(/^(#{1,6})\s+(.*)/);
-    const b = t.match(/^[-*•]\s+(.*)/);
-    const n = t.match(/^\d+[.)]\s+(.*)/);
-    const row = t.startsWith("|") && t.endsWith("|") && t.length > 1;
-    if (row) {
-      closeList();
-      const cells = t.slice(1, -1).split("|").map((c) => c.trim());
-      if (cells.every((c) => /^:?-{2,}:?$/.test(c) || c === "")) continue;
-      if (!table) { html += '<table border="1" cellpadding="6">'; table = true; }
-      html += "<tr>" + cells.map((c) => `<td>${inline(c)}</td>`).join("") + "</tr>";
-      continue;
-    }
-    closeTable();
-    if (h) { closeList(); html += `<h${h[1].length}>${inline(h[2].replace(/\*\*/g, ""))}</h${h[1].length}>`; }
-    else if (b) { if (list !== "ul") { closeList(); html += "<ul>"; list = "ul"; } html += `<li>${inline(b[1])}</li>`; }
-    else if (n) { if (list !== "ol") { closeList(); html += "<ol>"; list = "ol"; } html += `<li>${inline(n[1])}</li>`; }
-    else if (!t) { closeList(); }
-    else { closeList(); html += `<p>${inline(t)}</p>`; }
-  }
-  closeList(); closeTable();
-  return html;
 }

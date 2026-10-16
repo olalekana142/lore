@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { analyzeMeeting, listProjects, createProject, addProjectEntries, type MeetingAnalysis, type ProjectSummary } from "@/lib/api";
 import AnswerText from "./AnswerText";
+import { downloadMarkdown, downloadWord } from "@/lib/download";
 import { ErrorNote } from "./ui";
 import { IconCheck, IconGap, IconHealth, IconCopy, IconChat } from "./icons";
 
@@ -137,7 +138,11 @@ export default function MeetingIntelligence({ companyId, onSaved }: { companyId:
             <section className="card p-5">
               <div className="flex items-center justify-between">
                 <h3 className="flex items-center gap-2 text-sm font-semibold"><IconChat size={16} /> Follow-up email</h3>
-                <button onClick={copyEmail} className="btn-ghost inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"><IconCopy size={13} /> {copied ? "Copied" : "Copy"}</button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => downloadWord("meeting-recap", res.follow_up_email)} className="btn-ghost px-2.5 py-1.5 text-xs">Word</button>
+                  <button onClick={() => downloadMarkdown("meeting-recap", res.follow_up_email)} className="btn-ghost px-2.5 py-1.5 text-xs">.md</button>
+                  <button onClick={copyEmail} className="btn-ghost inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"><IconCopy size={13} /> {copied ? "Copied" : "Copy"}</button>
+                </div>
               </div>
               <div className="mt-2 rounded-lg bg-surface-2 p-3 text-sm"><AnswerText text={res.follow_up_email} /></div>
             </section>

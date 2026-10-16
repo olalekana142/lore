@@ -6,6 +6,7 @@ import { getWorkspaceHome, getDeliverable, updateWorkItem, type WorkspaceHome, t
 import { useAuth } from "@/lib/useAuth";
 import { relativeDate } from "@/lib/format";
 import AnswerText from "./AnswerText";
+import { downloadMarkdown, downloadWord } from "@/lib/download";
 import { IconDoc, IconUsers, IconCheck, IconGap, IconArrow, IconClock, IconBook, IconSparkle } from "./icons";
 
 const STATUS: Record<string, { label: string; color: string }> = {
@@ -157,6 +158,10 @@ export default function WorkspaceDashboard({ companyId, refreshKey, onLaunch }: 
                     <div className="animate-scale-in mb-3 rounded-lg bg-surface-2 p-3">
                       {detail ? (
                         <>
+                          <div className="mb-2 flex justify-end gap-3 text-xs">
+                            <button onClick={() => downloadWord(detail.title, detail.content)} className="text-muted hover:text-foreground">Word</button>
+                            <button onClick={() => downloadMarkdown(detail.title, detail.content)} className="text-muted hover:text-foreground">.md</button>
+                          </div>
                           <div className="text-sm"><AnswerText text={detail.content} /></div>
                           {detail.source_titles.length > 0 && <div className="mt-2 border-t border-border-soft pt-2 text-xs text-muted-dim">Sources: {detail.source_titles.join(" · ")}</div>}
                         </>
